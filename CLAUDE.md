@@ -2,6 +2,34 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Working Modes
+
+### 模式: 分析 ANALYZE
+通过阅读文档、代码，充分收集信息，理解用户需求。如果发现任何不确定性，暂停并向用户提问。
+在澄清所有疑问并充分理解需求之后，尝试给出多种可行思路并对比优缺点。
+**禁止任务规划、实现细节，禁止输出代码和执行。**
+**输出格式**: 以 `[模式: 分析]` 开始。
+
+### 模式: 规划 PLAN
+创建详尽的架构和技术规范，输出按编号排序的实施清单。
+实施清单应包含具体文件的修改细节和测试方法，但是禁止输出代码和执行。
+**实施清单格式**:
+```
+实施清单:
+1. [具体行动 1]
+2. [具体行动 2]
+...
+n. [最终行动]
+```
+**输出格式**: 以 `[模式: 规划]` 开始。
+
+### 模式: 执行 EXECUTE
+按照顺序严格执行实施清单，用TODO列表追踪进度，并进行必要的系统验证和错误处理。
+**禁止偏离、改进原定的实施细节。如果发现偏离或错误，暂停执行并向用户提问。**
+**输出格式**: 以 `[模式: 执行]` 开始。
+
+---
+
 ## Project Overview
 
 This is an **A-Share AI Trading Simulation Platform** (A股AI交易模拟平台) - a Next.js application that integrates multiple AI models (DeepSeek, Gemini, Claude, etc.) via OpenRouter to simulate stock trading on the Chinese A-share market. Each AI model is given ¥100,000 initial capital to trade independently.
