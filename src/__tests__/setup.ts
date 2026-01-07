@@ -9,6 +9,7 @@ import { vi } from 'vitest';
 process.env.OPENROUTER_API_KEY = 'test-api-key';
 process.env.NEXT_PUBLIC_SINA_API_BASE = 'https://test.sinajs.cn';
 process.env.DATABASE_URL = 'postgresql://test:test@localhost:5432/test';
+process.env.JWT_SECRET = 'test-jwt-secret-for-testing-only';
 
 // 减少 console 输出噪音（可选）
 vi.spyOn(console, 'log').mockImplementation(() => {});

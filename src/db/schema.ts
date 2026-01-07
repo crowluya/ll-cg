@@ -11,6 +11,19 @@ import {
 // 交易类型枚举
 export const tradeTypeEnum = pgEnum('trade_type', ['buy', 'sell']);
 
+// 用户角色枚举
+export const userRoleEnum = pgEnum('user_role', ['admin', 'trader']);
+
+// 用户表
+export const users = pgTable('users', {
+  id: text('id').primaryKey(),
+  username: text('username').notNull().unique(),
+  password: text('password').notNull(), // bcrypt 哈希
+  name: text('name').notNull(),
+  role: userRoleEnum('role').notNull().default('trader'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
 // 交易记录表
 export const trades = pgTable('trades', {
   id: text('id').primaryKey(),
