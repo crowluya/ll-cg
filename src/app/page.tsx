@@ -2,240 +2,252 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import { PortfolioChart } from '@/components/charts/PortfolioChart';
+import { ValueCardGrid, CompactValueLabel } from '@/components/dashboard/ValueCard';
+import { RefreshControl, type RefreshConfig } from '@/components/dashboard/RefreshControl';
+import { ConfigModal, ConfigButton, type PortfolioConfig } from '@/components/dashboard/ConfigModal';
+import { useRealtimePortfolio } from '@/hooks/useRealtimePortfolio';
+
+type TimeRange = 'all' | '1d' | '72h' | '1w' | '1m';
+
+const TIME_RANGE_OPTIONS: { value: TimeRange; label: string }[] = [
+  { value: 'all', label: '全部' },
+  { value: '1d', label: '1天' },
+  { value: '72h', label: '72小时' },
+  { value: '1w', label: '1周' },
+  { value: '1m', label: '1月' },
+];
 
 export default function HomePage() {
-  const [mode, setMode] = useState<'backtest' | 'live'>('backtest');
-  const [selectedStocks, setSelectedStocks] = useState<string[]>([]);
-  const [selectedModels, setSelectedModels] = useState<string[]>(['deepseek']);
-  const [historyDays, setHistoryDays] = useState(30);
-  const [startDate, setStartDate] = useState(
-    new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
-  );
-  const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0]);
-  const [isRunning, setIsRunning] = useState(false);
+  const [timeRange, setTimeRange] = useState<TimeRange>('all');
+  const [refreshConfig, setRefreshConfig] = useState<RefreshConfig>({
+    autoRefresh: true,
+    interval: 3,
+  });
+  const [configModalOpen, setConfigModalOpen] = useState(false);
+  const [portfolioConfig, setPortfolioConfig] = useState<PortfolioConfig>({
+    initialAmount: 100000,
+    deepseek: { initialAmount: 100000, enabled: true },
+    gemini: { initialAmount: 100000, enabled: true },
+  });
 
-  const availableStocks = [
-    { code: 'sh600000', name: '浦发银行' },
-    { code: 'sh600036', name: '招商银行' },
-    { code: 'sh600519', name: '贵州茅台' },
-    { code: 'sh601318', name: '中国平安' },
-    { code: 'sz000001', name: '平安银行' },
-    { code: 'sz000002', name: '万科A' },
-    { code: 'sz300750', name: '宁德时代' },
-  ];
+  const {
+    data,
+    models,
+    setTimeRange: setHookTimeRange,
+    refreshConfig: hookRefreshConfig,
+    setRefreshConfig: setHookRefreshConfig,
+    refresh,
+    isRefreshing,
+    lastUpdateTime,
+    error,
+  } = useRealtimePortfolio({
+    initialTimeRange: timeRange,
+    initialRefreshConfig: refreshConfig,
+    useMockData: true,
+  });
 
-  const availableModels = [
-    { key: 'deepseek', name: 'DeepSeek Chat' },
-    { key: 'gemini', name: 'Gemini 2.0 Flash' },
-    { key: 'claude', name: 'Claude 3.5 Sonnet' },
-  ];
-
-  const handleStockToggle = (code: string) => {
-    setSelectedStocks(prev =>
-      prev.includes(code) ? prev.filter(c => c !== code) : [...prev, code]
-    );
+  // Sync time range and refresh config
+  const handleTimeRangeChange = (newRange: TimeRange) => {
+    setTimeRange(newRange);
+    setHookTimeRange(newRange);
   };
 
-  const handleModelToggle = (key: string) => {
-    setSelectedModels(prev =>
-      prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]
-    );
+  const handleRefreshConfigChange = (newConfig: RefreshConfig) => {
+    setRefreshConfig(newConfig);
+    setHookRefreshConfig(newConfig);
   };
 
-  const handleRun = async () => {
-    if (selectedStocks.length === 0) {
-      alert('请至少选择一只股票');
-      return;
-    }
-    if (selectedModels.length === 0) {
-      alert('请至少选择一个模型');
-      return;
-    }
-
-    setIsRunning(true);
-
-    try {
-      const response = await fetch('/api/backtest/run', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          stocks: selectedStocks,
-          models: selectedModels,
-          startDate,
-          endDate,
-          historyDays,
-          initialCapital: 100000,
-        }),
-      });
-
-      const data = await response.json();
-
-      if (data.success) {
-        // 跳转到结果页面
-        const params = new URLSearchParams({
-          results: JSON.stringify(data.results),
-          summary: JSON.stringify(data.summary),
-        });
-        window.location.href = `/results?${params.toString()}`;
-      } else {
-        alert(`回测失败: ${data.error}`);
-      }
-    } catch (error) {
-      alert(`请求失败: ${error}`);
-    } finally {
-      setIsRunning(false);
-    }
+  const handleConfigSave = (newConfig: PortfolioConfig) => {
+    setPortfolioConfig(newConfig);
   };
 
   return (
-    <main className="min-h-screen bg-gray-50 p-8">
-      <div className="max-w-6xl mx-auto">
-        <header className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">A股AI交易模拟平台</h1>
-          <p className="text-gray-600">集成多AI模型的A股交易模拟回测平台</p>
-        </header>
-
-        <nav className="flex gap-4 mb-8 border-b pb-4">
-          <button
-            onClick={() => setMode('backtest')}
-            className={`px-4 py-2 rounded-lg ${
-              mode === 'backtest'
-                ? 'bg-blue-600 text-white'
-                : 'bg-gray-200 text-gray-700'
-            }`}
-          >
-            回测模式
-          </button>
-          <Link
-            href="/live"
-            className="px-4 py-2 rounded-lg bg-gray-200 text-gray-700 hover:bg-gray-300"
-          >
-            实盘模式
-          </Link>
-          <Link
-            href="/history"
-            className="px-4 py-2 rounded-lg bg-gray-200 text-gray-700 hover:bg-gray-300"
-          >
-            历史记录
-          </Link>
-        </nav>
-
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* 股票选择 */}
-          <div className="bg-white rounded-lg shadow p-6">
-            <h2 className="text-lg font-semibold mb-4">选择股票</h2>
-            <div className="space-y-2 max-h-64 overflow-y-auto">
-              {availableStocks.map(stock => (
-                <label key={stock.code} className="flex items-center gap-2 p-2 hover:bg-gray-50 rounded cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={selectedStocks.includes(stock.code)}
-                    onChange={() => handleStockToggle(stock.code)}
-                    className="w-4 h-4"
-                  />
-                  <span className="flex-1">{stock.name}</span>
-                  <span className="text-sm text-gray-500">{stock.code}</span>
-                </label>
-              ))}
+    <main className="min-h-screen bg-white">
+      {/* Header */}
+      <header className="border-b border-gray-200">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center justify-between h-16">
+            {/* Logo and Title */}
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-purple-600 rounded-xl flex items-center justify-center">
+                <span className="text-white font-bold text-lg">股</span>
+              </div>
+              <div>
+                <h1 className="text-xl font-bold text-gray-900">A股AI交易模拟平台</h1>
+                <p className="text-xs text-gray-500">Portfolio Dashboard</p>
+              </div>
             </div>
-            <p className="text-sm text-gray-500 mt-2">已选择: {selectedStocks.length} 只</p>
+
+            {/* Navigation */}
+            <nav className="flex items-center gap-2">
+              <Link
+                href="/"
+                className="px-4 py-2 text-sm font-medium text-blue-600 border-b-2 border-blue-600"
+              >
+                总览
+              </Link>
+              <Link
+                href="/backtest"
+                className="px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-900"
+              >
+                回测
+              </Link>
+              <Link
+                href="/live"
+                className="px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-900"
+              >
+                实盘
+              </Link>
+              <Link
+                href="/history"
+                className="px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-900"
+              >
+                历史
+              </Link>
+            </nav>
+          </div>
+        </div>
+      </header>
+
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        {/* Title and Controls */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+          <div>
+            <h2 className="text-2xl font-bold text-gray-900">总资产价值</h2>
+            <p className="text-sm text-gray-500">各模型持仓价值对比</p>
           </div>
 
-          {/* 模型选择 */}
-          <div className="bg-white rounded-lg shadow p-6">
-            <h2 className="text-lg font-semibold mb-4">选择AI模型</h2>
-            <div className="space-y-2">
-              {availableModels.map(model => (
-                <label key={model.key} className="flex items-center gap-2 p-2 hover:bg-gray-50 rounded cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={selectedModels.includes(model.key)}
-                    onChange={() => handleModelToggle(model.key)}
-                    className="w-4 h-4"
-                  />
-                  <span className="flex-1">{model.name}</span>
-                </label>
+          <div className="flex flex-wrap items-center gap-3">
+            {/* Time Range Selector */}
+            <div className="flex items-center bg-gray-100 rounded-lg p-1">
+              {TIME_RANGE_OPTIONS.map((option) => (
+                <button
+                  key={option.value}
+                  onClick={() => handleTimeRangeChange(option.value)}
+                  className={`px-4 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                    timeRange === option.value
+                      ? 'bg-white text-gray-900 shadow-sm'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  {option.label}
+                </button>
               ))}
             </div>
-            <p className="text-sm text-gray-500 mt-2">已选择: {selectedModels.length} 个</p>
-          </div>
 
-          {/* 参数设置 */}
-          <div className="bg-white rounded-lg shadow p-6">
-            <h2 className="text-lg font-semibold mb-4">回测参数</h2>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  历史数据天数
-                </label>
-                <input
-                  type="number"
-                  value={historyDays}
-                  onChange={(e) => setHistoryDays(Number(e.target.value))}
-                  min={5}
-                  max={365}
-                  className="w-full px-3 py-2 border rounded-lg"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  开始日期
-                </label>
-                <input
-                  type="date"
-                  value={startDate}
-                  onChange={(e) => setStartDate(e.target.value)}
-                  className="w-full px-3 py-2 border rounded-lg"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  结束日期
-                </label>
-                <input
-                  type="date"
-                  value={endDate}
-                  onChange={(e) => setEndDate(e.target.value)}
-                  className="w-full px-3 py-2 border rounded-lg"
-                />
-              </div>
-              <div className="pt-4 border-t">
-                <div className="flex justify-between text-sm text-gray-600">
-                  <span>初始资金:</span>
-                  <span className="font-medium">¥100,000</span>
-                </div>
-              </div>
-            </div>
+            {/* Refresh Control */}
+            <RefreshControl
+              config={hookRefreshConfig}
+              onConfigChange={handleRefreshConfigChange}
+              onManualRefresh={refresh}
+              isRefreshing={isRefreshing}
+              lastUpdateTime={lastUpdateTime}
+            />
+
+            {/* Config Button */}
+            <ConfigButton onClick={() => setConfigModalOpen(true)} />
           </div>
         </div>
 
-        {/* 操作按钮 */}
-        <div className="mt-8 flex justify-center">
-          <button
-            onClick={handleRun}
-            disabled={isRunning || selectedStocks.length === 0 || selectedModels.length === 0}
-            className={`px-8 py-3 rounded-lg font-medium text-white ${
-              isRunning || selectedStocks.length === 0 || selectedModels.length === 0
-                ? 'bg-gray-400 cursor-not-allowed'
-                : 'bg-blue-600 hover:bg-blue-700'
-            }`}
-          >
-            {isRunning ? '回测运行中...' : '开始回测'}
-          </button>
+        {/* Value Cards */}
+        <div className="mb-6">
+          <ValueCardGrid models={models} />
         </div>
 
-        {/* 说明 */}
-        <div className="mt-8 bg-blue-50 rounded-lg p-4">
-          <h3 className="font-medium text-blue-900 mb-2">使用说明</h3>
-          <ul className="text-sm text-blue-800 space-y-1">
-            <li>• 选择要回测的股票和AI模型</li>
-            <li>• 设置历史数据天数（AI用于决策的参考数据量）</li>
-            <li>• 选择回测时间段</li>
-            <li>• 每个模型独立运行，初始资金均为¥100,000</li>
-            <li>• 遵循A股T+1交易规则</li>
-          </ul>
+        {/* Chart */}
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden relative">
+          {/* Error Message */}
+          {error && (
+            <div className="bg-red-50 border-b border-red-200 px-4 py-3">
+              <p className="text-sm text-red-600">{error}</p>
+            </div>
+          )}
+
+          {/* Loading State */}
+          {!data && !error && (
+            <div className="flex items-center justify-center h-[500px]">
+              <div className="text-center">
+                <div className="inline-block w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mb-3" />
+                <p className="text-gray-500">加载数据中...</p>
+              </div>
+            </div>
+          )}
+
+          {/* Chart */}
+          {data && (
+            <>
+              <PortfolioChart
+                dataPoints={data.dataPoints}
+                models={[
+                  {
+                    key: 'benchmark',
+                    name: data.benchmark.name,
+                    color: data.benchmark.color,
+                    currentValue: data.benchmark.currentValue,
+                    changePercent: data.benchmark.changePercent,
+                    icon: data.benchmark.icon,
+                  },
+                  {
+                    key: 'deepseek',
+                    name: data.deepseek.name,
+                    color: data.deepseek.color,
+                    currentValue: data.deepseek.currentValue,
+                    changePercent: data.deepseek.changePercent,
+                    icon: data.deepseek.icon,
+                  },
+                  {
+                    key: 'gemini',
+                    name: data.gemini.name,
+                    color: data.gemini.color,
+                    currentValue: data.gemini.currentValue,
+                    changePercent: data.gemini.changePercent,
+                    icon: data.gemini.icon,
+                  },
+                ]}
+                timeRange={timeRange}
+                height="500px"
+              />
+            </>
+          )}
+        </div>
+
+        {/* Quick Stats */}
+        <div className="mt-6 grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="bg-gray-50 rounded-xl p-4">
+            <div className="text-sm text-gray-500 mb-1">DeepSeek 收益率</div>
+            <div className={`text-lg font-bold ${
+              data?.deepseek.changePercent && data.deepseek.changePercent >= 0 ? 'text-green-600' : 'text-red-600'
+            }`}>
+              {data?.deepseek.changePercent && data.deepseek.changePercent >= 0 ? '+' : ''}
+              {data?.deepseek.changePercent?.toFixed(2) ?? '--'}%
+            </div>
+          </div>
+          <div className="bg-gray-50 rounded-xl p-4">
+            <div className="text-sm text-gray-500 mb-1">Gemini 收益率</div>
+            <div className={`text-lg font-bold ${
+              data?.gemini.changePercent && data.gemini.changePercent >= 0 ? 'text-green-600' : 'text-red-600'
+            }`}>
+              {data?.gemini.changePercent && data.gemini.changePercent >= 0 ? '+' : ''}
+              {data?.gemini.changePercent?.toFixed(2) ?? '--'}%
+            </div>
+          </div>
+          <div className="bg-gray-50 rounded-xl p-4">
+            <div className="text-sm text-gray-500 mb-1">数据更新</div>
+            <div className="text-lg font-bold text-gray-900">
+              {lastUpdateTime?.toLocaleTimeString('zh-CN') || '--:--:--'}
+            </div>
+          </div>
         </div>
       </div>
+
+      {/* Config Modal */}
+      <ConfigModal
+        isOpen={configModalOpen}
+        config={portfolioConfig}
+        onSave={handleConfigSave}
+        onClose={() => setConfigModalOpen(false)}
+      />
     </main>
   );
 }
