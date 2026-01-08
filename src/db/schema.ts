@@ -1,6 +1,7 @@
 import {
   pgTable,
   text,
+  integer,
   numeric,
   timestamp,
   jsonb,
@@ -83,4 +84,37 @@ export const liveTradingStatus = pgTable('live_trading_status', {
   lastDecisionTime: timestamp('last_decision_time'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
+// 组合曲线（秒级/N秒级）点位表
+export const portfolioSeriesPoints = pgTable('portfolio_series_points', {
+  id: text('id').primaryKey(),
+  portfolioId: text('portfolio_id').notNull(),
+  tradeDate: text('trade_date').notNull(), // YYYY-MM-DD
+  intervalSec: integer('interval_sec').notNull().default(1),
+  ts: timestamp('ts').notNull(),
+  totalValue: numeric('total_value', { precision: 14, scale: 2 }).notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
+// 个股分时点位（N分钟）
+export const stockIntradayPoints = pgTable('stock_intraday_points', {
+  id: text('id').primaryKey(),
+  code: text('code').notNull(),
+  tradeDate: text('trade_date').notNull(), // YYYY-MM-DD
+  scaleMinutes: integer('scale_minutes').notNull().default(5),
+  ts: timestamp('ts').notNull(),
+  close: numeric('close', { precision: 10, scale: 2 }).notNull(),
+  volume: numeric('volume', { precision: 14, scale: 0 }).notNull().default('0'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
+// 事件表（回放核心：买卖/入金/出金/费用等）
+export const portfolioEvents = pgTable('portfolio_events', {
+  id: text('id').primaryKey(),
+  portfolioId: text('portfolio_id').notNull(),
+  ts: timestamp('ts').notNull(),
+  type: text('type').notNull(),
+  payload: jsonb('payload').notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
 });

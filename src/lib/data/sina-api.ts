@@ -2,10 +2,28 @@ import axios from 'axios';
 import type { StockData } from '@/types';
 
 // 新浪财经 API 基础地址
-const SINA_API_BASE = process.env.NEXT_PUBLIC_SINA_API_BASE || 'https://hq.sinajs.cn';
+const SINA_API_BASE = (process.env.NEXT_PUBLIC_SINA_API_BASE || 'https://hq.sinajs.cn')
+  .replace('https://hq.sinajs.cn', 'http://hq.sinajs.cn');
+
+const SINA_HEADERS = {
+  Referer: 'https://finance.sina.com.cn/',
+  'User-Agent':
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+  Accept: '*/*',
+} as const;
 
 // 历史K线数据接口 - 使用新浪财经的历史数据接口
 const SINA_HISTORY_API = 'https://money.finance.sina.com.cn/quotes_service/api/json_v2.php';
+
+export interface IntradayKLinePoint {
+  code: string;
+  timestamp: string;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+}
 
 /**
  * 获取单只股票历史K线数据
@@ -71,6 +89,67 @@ export async function fetchStockData(code: string, days: number = 30): Promise<S
 }
 
 /**
+ * 获取当日 N 分钟 K 线（分时）数据
+ * @param code 股票代码，如 sh600000 或 sz000001
+ * @param scaleMinutes K线周期，单位分钟（如 1 / 5 / 15 / 30 / 60）
+ * @param datalen 拉取条数（默认 1024）
+ */
+export async function fetchIntradayKLine(
+  code: string,
+  scaleMinutes: number = 5,
+  datalen: number = 1024
+): Promise<IntradayKLinePoint[]> {
+  try {
+    const standardCode = standardizeStockCode(code);
+    const url = `${SINA_HISTORY_API}/CN_MarketData.getKLineData`;
+
+    const response = await axios.get(url, {
+      params: {
+        symbol: standardCode,
+        scale: scaleMinutes,
+        ma: 'no',
+        datalen,
+      },
+      timeout: 10000,
+      headers: SINA_HEADERS,
+    });
+
+    const raw = response.data;
+    if (!Array.isArray(raw) || raw.length === 0) {
+      return [];
+    }
+
+    const today = new Date();
+    const yyyy = today.getFullYear();
+    const mm = String(today.getMonth() + 1).padStart(2, '0');
+    const dd = String(today.getDate()).padStart(2, '0');
+    const todayPrefix = `${yyyy}-${mm}-${dd}`;
+
+    const points: IntradayKLinePoint[] = [];
+    for (const item of raw) {
+      const day: string = item.day || item.date || '';
+      if (!day || !day.startsWith(todayPrefix)) continue;
+
+      points.push({
+        code: standardCode,
+        timestamp: day.replace(' ', 'T'),
+        open: parseFloat(item.open),
+        high: parseFloat(item.high),
+        low: parseFloat(item.low),
+        close: parseFloat(item.close),
+        volume: parseInt(item.volume, 10),
+      });
+    }
+
+    points.sort((a, b) => a.timestamp.localeCompare(b.timestamp));
+    return points;
+  } catch (error) {
+    console.error(`Error fetching intraday kline for ${code}:`, error);
+    return [];
+  }
+}
+
+/**
  * 批量获取多只股票历史数据
  * @param codes 股票代码数组
  * @param days 获取天数
@@ -111,6 +190,7 @@ export async function fetchRealtimeData(code: string): Promise<{
   name: string;
   price: number;
   open: number;
+  close: number;
   high: number;
   low: number;
   volume: number;
@@ -120,7 +200,10 @@ export async function fetchRealtimeData(code: string): Promise<{
     const standardCode = standardizeStockCode(code);
     const url = `${SINA_API_BASE}/list=${standardCode}`;
 
-    const response = await axios.get(url, { timeout: 5000 });
+    const response = await axios.get(url, {
+      timeout: 5000,
+      headers: SINA_HEADERS,
+    });
 
     // 新浪返回的数据格式: var hq_str_sh600000="浦发银行,10.50,10.45,10.55,..."
     const data = response.data;
@@ -151,6 +234,7 @@ export async function fetchRealtimeData(code: string): Promise<{
       name,
       price,
       open,
+      close,
       high,
       low,
       volume,
@@ -172,6 +256,7 @@ export async function fetchBatchRealtimeData(codes: string[]): Promise<Array<{
   name: string;
   price: number;
   open: number;
+  close: number;
   high: number;
   low: number;
   volume: number;
@@ -181,7 +266,10 @@ export async function fetchBatchRealtimeData(codes: string[]): Promise<Array<{
     const standardCodes = codes.map(standardizeStockCode);
     const url = `${SINA_API_BASE}/list=${standardCodes.join(',')}`;
 
-    const response = await axios.get(url, { timeout: 5000 });
+    const response = await axios.get(url, {
+      timeout: 5000,
+      headers: SINA_HEADERS,
+    });
 
     // 解析多只股票的实时数据
     const lines = response.data.split('\n').filter((line: string) => line.trim());
@@ -200,6 +288,7 @@ export async function fetchBatchRealtimeData(codes: string[]): Promise<Array<{
               name: parts[0],
               price: parseFloat(parts[3]),
               open: parseFloat(parts[1]),
+              close: parseFloat(parts[2]),
               high: parseFloat(parts[4]),
               low: parseFloat(parts[5]),
               volume: parseInt(parts[8], 10) * 100,

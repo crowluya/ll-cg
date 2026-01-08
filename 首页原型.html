@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>持仓股票 - 首页原型</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+            background: #f5f5f5;
+            color: #333;
+            min-height: 100vh;
+        }
+
+        /* 账户摘要区域 */
+        .account-summary {
+            background: #fff;
+            padding: 20px 16px;
+            border-bottom: 1px solid #e5e7eb;
+            margin-bottom: 8px;
+        }
+
+        .summary-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 12px;
+        }
+
+        .summary-row:last-child {
+            margin-bottom: 0;
+        }
+
+        .summary-label {
+            font-size: 14px;
+            color: #666;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .summary-value {
+            font-size: 16px;
+            font-weight: bold;
+            color: #333;
+        }
+
+        .summary-value.positive {
+            color: #ef4444;
+        }
+
+        .summary-value.negative {
+            color: #10b981;
+        }
+
+        .summary-large {
+            font-size: 24px;
+        }
+
+        .summary-link {
+            color: #4a9eff;
+            font-size: 12px;
+            margin-left: 8px;
+        }
+
+        /* 图表区域 */
+        .chart-section {
+            background: #fff;
+            padding: 16px;
+            margin-bottom: 8px;
+            border-radius: 8px;
+        }
+
+        .chart-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+
+        .chart-tabs {
+            display: flex;
+            gap: 8px;
+        }
+
+        .chart-tab {
+            padding: 6px 12px;
+            font-size: 12px;
+            color: #666;
+            border-bottom: 2px solid transparent;
+            cursor: pointer;
+        }
+
+        .chart-tab.active {
+            color: #3b82f6;
+            border-bottom-color: #3b82f6;
+        }
+
+        .chart-info {
+            display: flex;
+            gap: 16px;
+            font-size: 12px;
+        }
+
+        .chart-info-item {
+            color: #666;
+        }
+
+        .chart-info-value {
+            color: #333;
+        }
+
+        .chart-info-value.positive {
+            color: #ef4444;
+        }
+
+        .chart-container {
+            height: 300px;
+            background: #f9fafb;
+            border: 1px solid #e5e7eb;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #666;
+            position: relative;
+        }
+
+        .chart-placeholder {
+            text-align: center;
+        }
+
+        .chart-grid {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 20px 60px 40px;
+        }
+
+        .chart-grid-line {
+            border-top: 1px dashed #d1d5db;
+        }
+
+        .chart-y-axis {
+            position: absolute;
+            left: 10px;
+            top: 0;
+            bottom: 40px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            font-size: 11px;
+            color: #666;
+        }
+
+        .chart-y-axis .positive {
+            color: #ef4444;
+        }
+
+        .chart-y-axis .negative {
+            color: #10b981;
+        }
+
+        .chart-x-axis {
+            position: absolute;
+            bottom: 10px;
+            left: 60px;
+            right: 10px;
+            display: flex;
+            justify-content: space-between;
+            font-size: 11px;
+            color: #666;
+        }
+
+        /* 持仓列表区域 */
+        .holdings-section {
+            background: #fff;
+            border-radius: 8px;
+        }
+
+        .holdings-header {
+            padding: 12px 16px;
+            border-bottom: 1px solid #e5e7eb;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .holdings-title {
+            font-size: 16px;
+            font-weight: bold;
+        }
+
+        .holdings-sort {
+            display: flex;
+            gap: 16px;
+            font-size: 12px;
+            color: #666;
+        }
+
+        .holdings-sort-item {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            cursor: pointer;
+        }
+
+        .holdings-list {
+            padding: 0;
+        }
+
+        .holding-item {
+            padding: 16px;
+            border-bottom: 1px solid #e5e7eb;
+            display: grid;
+            grid-template-columns: 2fr 1fr 1fr 1fr;
+            gap: 12px;
+            align-items: center;
+        }
+
+        .holding-item:last-child {
+            border-bottom: none;
+        }
+
+        .holding-stock {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .holding-stock-name {
+            font-size: 15px;
+            font-weight: bold;
+            color: #333;
+        }
+
+        .holding-stock-code {
+            font-size: 11px;
+            color: #999;
+        }
+
+        .holding-value {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 4px;
+        }
+
+        .holding-value-main {
+            font-size: 14px;
+            font-weight: bold;
+        }
+
+        .holding-value-sub {
+            font-size: 11px;
+            color: #999;
+        }
+
+        .holding-value.positive .holding-value-main {
+            color: #ef4444;
+        }
+
+        .holding-value.negative .holding-value-main {
+            color: #10b981;
+        }
+
+        .holding-quantity {
+            text-align: right;
+            font-size: 13px;
+            color: #666;
+        }
+
+        .holding-price {
+            text-align: right;
+            font-size: 13px;
+            color: #666;
+        }
+
+        /* 响应式 */
+        @media (min-width: 768px) {
+            body {
+                max-width: 768px;
+                margin: 0 auto;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- 账户摘要区域 -->
+    <div class="account-summary">
+        <div class="summary-row">
+            <div class="summary-label">
+                <span>👁</span>
+                <span>总资产</span>
+            </div>
+            <div class="summary-value summary-large">79,187.70</div>
+        </div>
+        <div class="summary-row">
+            <div class="summary-label">浮动盈亏</div>
+            <div class="summary-value positive summary-large">+2,801.82</div>
+        </div>
+        <div class="summary-row">
+            <div class="summary-label">
+                <span>当日参考盈亏</span>
+                <span style="font-size: 10px;">ℹ</span>
+            </div>
+            <div class="summary-value positive">+3,033.29 <span style="font-size: 12px;">3.98%</span></div>
+        </div>
+        <div class="summary-row">
+            <div class="summary-label">总市值</div>
+            <div class="summary-value">70,158.00</div>
+        </div>
+        <div class="summary-row">
+            <div class="summary-label">
+                <span>可用</span>
+                <span class="summary-link">国债 →</span>
+            </div>
+            <div class="summary-value">9,018.70</div>
+        </div>
+        <div class="summary-row">
+            <div class="summary-label">
+                <span>可取</span>
+                <span class="summary-link">转账 →</span>
+            </div>
+            <div class="summary-value">5,348.82</div>
+        </div>
+    </div>
+
+    <!-- 图表区域 -->
+    <div class="chart-section">
+        <div class="chart-header">
+            <div class="chart-tabs">
+                <div class="chart-tab active">分时</div>
+                <div class="chart-tab">日K</div>
+                <div class="chart-tab">周K</div>
+                <div class="chart-tab">月K</div>
+                <div class="chart-tab">五日</div>
+            </div>
+            <div class="chart-info">
+                <div class="chart-info-item">
+                    均价:<span class="chart-info-value">56.87</span>
+                </div>
+                <div class="chart-info-item">
+                    最新:<span class="chart-info-value">59.95</span>
+                </div>
+                <div class="chart-info-item">
+                    <span class="chart-info-value positive">+3.90%</span>
+                </div>
+            </div>
+        </div>
+        <div class="chart-container">
+            <div class="chart-grid">
+                <div class="chart-grid-line"></div>
+                <div class="chart-grid-line"></div>
+                <div class="chart-grid-line"></div>
+                <div class="chart-grid-line"></div>
+            </div>
+            <div class="chart-y-axis">
+                <span class="positive">+8.32%</span>
+                <span>0.00%</span>
+                <span class="negative">-8.32%</span>
+            </div>
+            <div class="chart-x-axis">
+                <span>09:30</span>
+                <span>11:30</span>
+                <span>15:00</span>
+            </div>
+            <div class="chart-placeholder">
+                <div style="margin-bottom: 8px;">📈 分时图</div>
+                <div style="font-size: 11px; color: #666;">白色线：价格走势</div>
+                <div style="font-size: 11px; color: #666;">橙色线：均价线</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 持仓列表区域 -->
+    <div class="holdings-section">
+        <div class="holdings-header">
+            <div class="holdings-title">持仓股</div>
+            <div class="holdings-sort">
+                <div class="holdings-sort-item">
+                    <span>市值</span>
+                    <span>↕</span>
+                </div>
+                <div class="holdings-sort-item">
+                    <span>盈亏</span>
+                    <span>↕</span>
+                </div>
+            </div>
+        </div>
+        <div class="holdings-list">
+            <!-- 持仓项1 -->
+            <div class="holding-item">
+                <div class="holding-stock">
+                    <div class="holding-stock-name">创元科技</div>
+                    <div class="holding-stock-code">000551 融</div>
+                </div>
+                <div class="holding-value positive">
+                    <div class="holding-value-main">31,332.00</div>
+                    <div class="holding-value-sub">+411.72 (+1.330%)</div>
+                </div>
+                <div class="holding-quantity">2100 / 400</div>
+                <div class="holding-price">14.724 / 14.920</div>
+            </div>
+
+            <!-- 持仓项2 -->
+            <div class="holding-item">
+                <div class="holding-stock">
+                    <div class="holding-stock-name">智慧农业</div>
+                    <div class="holding-stock-code">000816 融</div>
+                </div>
+                <div class="holding-value negative">
+                    <div class="holding-value-main">5,138.00</div>
+                    <div class="holding-value-sub">-582.34 (-10.180%)</div>
+                </div>
+                <div class="holding-quantity">1400 / 1400</div>
+                <div class="holding-price">4.086 / 3.670</div>
+            </div>
+
+            <!-- 持仓项3 -->
+            <div class="holding-item">
+                <div class="holding-stock">
+                    <div class="holding-stock-name">华菱线缆</div>
+                    <div class="holding-stock-code">001208 融</div>
+                </div>
+                <div class="holding-value positive">
+                    <div class="holding-value-main">11,364.00</div>
+                    <div class="holding-value-sub">+333.97 (+3.030%)</div>
+                </div>
+                <div class="holding-quantity">400 / 400</div>
+                <div class="holding-price">27.575 / 28.410</div>
+            </div>
+
+            <!-- 持仓项4 -->
+            <div class="holding-item">
+                <div class="holding-stock">
+                    <div class="holding-stock-name">北斗星通</div>
+                    <div class="holding-stock-code">002151 融</div>
+                </div>
+                <div class="holding-value positive">
+                    <div class="holding-value-main">12,012.00</div>
+                    <div class="holding-value-sub">+850.29 (+7.615%)</div>
+                </div>
+                <div class="holding-quantity">200 / 0</div>
+                <div class="holding-price">55.809 / 60.060</div>
+            </div>
+
+            <!-- 持仓项5 -->
+            <div class="holding-item">
+                <div class="holding-stock">
+                    <div class="holding-stock-name">掌阅科技</div>
+                    <div class="holding-stock-code">603533 融</div>
+                </div>
+                <div class="holding-value positive">
+                    <div class="holding-value-main">10,312.00</div>
+                    <div class="holding-value-sub">+1,831.48 (+21.600%)</div>
+                </div>
+                <div class="holding-quantity">400 / 0</div>
+                <div class="holding-price">21.201 / 25.780</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 简单的交互效果
+        document.querySelectorAll('.chart-tab').forEach(tab => {
+            tab.addEventListener('click', function() {
+                document.querySelectorAll('.chart-tab').forEach(t => t.classList.remove('active'));
+                this.classList.add('active');
+            });
+        });
+
+        document.querySelectorAll('.holdings-sort-item').forEach(item => {
+            item.addEventListener('click', function() {
+                // 排序功能可以在这里实现
+                console.log('排序:', this.textContent);
+            });
+        });
+    </script>
+</body>
+</html>
+

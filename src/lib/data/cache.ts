@@ -13,6 +13,7 @@ const memoryCache = new Map<string, CacheItem<any>>();
 const DEFAULT_TTL = 5 * 60 * 1000; // 5分钟
 const STOCK_DATA_TTL = 15 * 60 * 1000; // 15分钟 - 股票数据缓存
 const REALTIME_DATA_TTL = 30 * 1000; // 30秒 - 实时数据缓存
+const INTRADAY_DATA_TTL = 5 * 60 * 1000; // 5分钟 - 分时数据缓存
 
 /**
  * 生成缓存键
@@ -40,6 +41,10 @@ export function generateStockDataKey(code: string, days: number): string {
  */
 export function generateRealtimeKey(code: string): string {
   return generateCacheKey('realtime', code.toLowerCase());
+}
+
+export function generateIntradayKey(code: string, date: string, scale: number): string {
+  return generateCacheKey('intraday', code.toLowerCase(), date, String(scale));
 }
 
 /**
@@ -160,6 +165,15 @@ export async function getOrSetStockData(
   fn: () => Promise<StockData[]>
 ): Promise<StockData[]> {
   return getOrSetCached(generateStockDataKey(code, days), fn, STOCK_DATA_TTL);
+}
+
+export async function getOrSetIntradayData<T>(
+  code: string,
+  date: string,
+  scale: number,
+  fn: () => Promise<T>
+): Promise<T> {
+  return getOrSetCached(generateIntradayKey(code, date, scale), fn, INTRADAY_DATA_TTL);
 }
 
 /**

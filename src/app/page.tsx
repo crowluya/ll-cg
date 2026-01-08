@@ -2,11 +2,13 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { PortfolioChart } from '@/components/charts/PortfolioChart';
-import { ValueCardGrid, CompactValueLabel } from '@/components/dashboard/ValueCard';
+import { PortfolioTotalChart } from '@/components/charts/PortfolioTotalChart';
+import { HoldingsPricePanel } from '@/components/portfolio/HoldingsPricePanel';
 import { RefreshControl, type RefreshConfig } from '@/components/dashboard/RefreshControl';
 import { ConfigModal, ConfigButton, type PortfolioConfig } from '@/components/dashboard/ConfigModal';
-import { useRealtimePortfolio } from '@/hooks/useRealtimePortfolio';
+import { usePortfolioIntraday } from '@/hooks/usePortfolioIntraday';
+import { usePortfolioRealtime } from '@/hooks/usePortfolioRealtime';
+import { formatCurrency } from '@/lib/mock/portfolio-data';
 
 type TimeRange = 'all' | '1d' | '72h' | '1w' | '1m';
 
@@ -33,24 +35,21 @@ export default function HomePage() {
 
   const {
     data,
-    models,
-    setTimeRange: setHookTimeRange,
     refreshConfig: hookRefreshConfig,
     setRefreshConfig: setHookRefreshConfig,
     refresh,
     isRefreshing,
     lastUpdateTime,
     error,
-  } = useRealtimePortfolio({
-    initialTimeRange: timeRange,
+  } = usePortfolioIntraday({
     initialRefreshConfig: refreshConfig,
-    useMockData: true,
   });
+
+  const { points: realtimePoints, error: realtimeError } = usePortfolioRealtime({ intervalMs: 1000 });
 
   // Sync time range and refresh config
   const handleTimeRangeChange = (newRange: TimeRange) => {
     setTimeRange(newRange);
-    setHookTimeRange(newRange);
   };
 
   const handleRefreshConfigChange = (newConfig: RefreshConfig) => {
@@ -108,6 +107,60 @@ export default function HomePage() {
             </nav>
           </div>
         </div>
+
+        {/* Overview */}
+        {data && (
+          <div className="mb-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+            <div className="bg-gray-50 rounded-xl p-4">
+              <div className="text-sm text-gray-500 mb-1">当日盈亏</div>
+              <div
+                className={`text-lg font-bold tabular-nums ${
+                  data.total.dailyPnl >= 0 ? 'text-red-600' : 'text-green-600'
+                }`}
+              >
+                {data.total.dailyPnl >= 0 ? '+' : ''}{formatCurrency(data.total.dailyPnl)}
+              </div>
+              <div className="text-xs text-gray-500 mt-1">
+                {data.total.dailyPnlPercent >= 0 ? '+' : ''}{data.total.dailyPnlPercent.toFixed(2)}%
+              </div>
+            </div>
+
+            <div className="bg-gray-50 rounded-xl p-4">
+              <div className="text-sm text-gray-500 mb-1">浮动盈亏</div>
+              <div
+                className={`text-lg font-bold tabular-nums ${
+                  data.total.floatingPnl >= 0 ? 'text-red-600' : 'text-green-600'
+                }`}
+              >
+                {data.total.floatingPnl >= 0 ? '+' : ''}{formatCurrency(data.total.floatingPnl)}
+              </div>
+              <div className="text-xs text-gray-500 mt-1">
+                {data.total.floatingPnlPercent >= 0 ? '+' : ''}{data.total.floatingPnlPercent.toFixed(2)}%
+              </div>
+            </div>
+
+            <div className="bg-gray-50 rounded-xl p-4">
+              <div className="text-sm text-gray-500 mb-1">总资产</div>
+              <div className="text-lg font-bold text-gray-900 tabular-nums">
+                {formatCurrency(data.total.totalAssets)}
+              </div>
+            </div>
+
+            <div className="bg-gray-50 rounded-xl p-4">
+              <div className="text-sm text-gray-500 mb-1">总市值</div>
+              <div className="text-lg font-bold text-gray-900 tabular-nums">
+                {formatCurrency(data.total.totalMarketValue)}
+              </div>
+            </div>
+
+            <div className="bg-gray-50 rounded-xl p-4">
+              <div className="text-sm text-gray-500 mb-1">可用资金</div>
+              <div className="text-lg font-bold text-gray-900 tabular-nums">
+                {formatCurrency(data.total.availableCash)}
+              </div>
+            </div>
+          </div>
+        )}
       </header>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
@@ -150,22 +203,17 @@ export default function HomePage() {
           </div>
         </div>
 
-        {/* Value Cards */}
-        <div className="mb-6">
-          <ValueCardGrid models={models} />
-        </div>
-
         {/* Chart */}
         <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden relative">
           {/* Error Message */}
-          {error && (
+          {(error || realtimeError) && (
             <div className="bg-red-50 border-b border-red-200 px-4 py-3">
-              <p className="text-sm text-red-600">{error}</p>
+              <p className="text-sm text-red-600">{error || realtimeError}</p>
             </div>
           )}
 
           {/* Loading State */}
-          {!data && !error && (
+          {!data && !error && !realtimePoints.length && !realtimeError && (
             <div className="flex items-center justify-center h-[500px]">
               <div className="text-center">
                 <div className="inline-block w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mb-3" />
@@ -175,61 +223,45 @@ export default function HomePage() {
           )}
 
           {/* Chart */}
-          {data && (
+          {(realtimePoints.length > 0 || data) && (
             <>
-              <PortfolioChart
-                dataPoints={data.dataPoints}
-                models={[
-                  {
-                    key: 'benchmark',
-                    name: data.benchmark.name,
-                    color: data.benchmark.color,
-                    currentValue: data.benchmark.currentValue,
-                    changePercent: data.benchmark.changePercent,
-                    icon: data.benchmark.icon,
-                  },
-                  {
-                    key: 'deepseek',
-                    name: data.deepseek.name,
-                    color: data.deepseek.color,
-                    currentValue: data.deepseek.currentValue,
-                    changePercent: data.deepseek.changePercent,
-                    icon: data.deepseek.icon,
-                  },
-                  {
-                    key: 'gemini',
-                    name: data.gemini.name,
-                    color: data.gemini.color,
-                    currentValue: data.gemini.currentValue,
-                    changePercent: data.gemini.changePercent,
-                    icon: data.gemini.icon,
-                  },
-                ]}
-                timeRange={timeRange}
+              <PortfolioTotalChart
+                points={
+                  realtimePoints.length
+                    ? realtimePoints.map((p) => ({ timestamp: p.timestamp, totalValue: p.totalValue }))
+                    : (data?.points ?? [])
+                }
                 height="500px"
               />
             </>
           )}
         </div>
 
+        {/* Holdings prices */}
+        {data && (
+          <div className="mt-6">
+            <HoldingsPricePanel holdings={data.holdings} />
+          </div>
+        )}
+
         {/* Quick Stats */}
         <div className="mt-6 grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div className="bg-gray-50 rounded-xl p-4">
-            <div className="text-sm text-gray-500 mb-1">DeepSeek 收益率</div>
+            <div className="text-sm text-gray-500 mb-1">当日盈亏</div>
             <div className={`text-lg font-bold ${
-              data?.deepseek.changePercent && data.deepseek.changePercent >= 0 ? 'text-green-600' : 'text-red-600'
+              data?.total.dailyPnl != null && data.total.dailyPnl >= 0 ? 'text-red-600' : 'text-green-600'
             }`}>
-              {data?.deepseek.changePercent && data.deepseek.changePercent >= 0 ? '+' : ''}
-              {data?.deepseek.changePercent?.toFixed(2) ?? '--'}%
+              {data?.total.dailyPnl != null && data.total.dailyPnl >= 0 ? '+' : ''}
+              {data?.total.dailyPnl != null ? `¥${data.total.dailyPnl.toFixed(2)}` : '--'}
             </div>
           </div>
           <div className="bg-gray-50 rounded-xl p-4">
-            <div className="text-sm text-gray-500 mb-1">Gemini 收益率</div>
+            <div className="text-sm text-gray-500 mb-1">浮动盈亏</div>
             <div className={`text-lg font-bold ${
-              data?.gemini.changePercent && data.gemini.changePercent >= 0 ? 'text-green-600' : 'text-red-600'
+              data?.total.floatingPnl != null && data.total.floatingPnl >= 0 ? 'text-red-600' : 'text-green-600'
             }`}>
-              {data?.gemini.changePercent && data.gemini.changePercent >= 0 ? '+' : ''}
-              {data?.gemini.changePercent?.toFixed(2) ?? '--'}%
+              {data?.total.floatingPnl != null && data.total.floatingPnl >= 0 ? '+' : ''}
+              {data?.total.floatingPnl != null ? `¥${data.total.floatingPnl.toFixed(2)}` : '--'}
             </div>
           </div>
           <div className="bg-gray-50 rounded-xl p-4">
