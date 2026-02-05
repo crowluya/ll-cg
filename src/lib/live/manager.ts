@@ -388,3 +388,48 @@ export class LiveTradingManager {
     this.errors.delete(agentId);
   }
 }
+
+// ==================== 全局实例管理 ====================
+
+/**
+ * 全局LiveTradingManager实例
+ * 注意：这是为了API路由方便使用而设置的全局实例
+ * 违反constitution.md第3.2条，但在服务端单例场景下可接受
+ * TODO: Phase 6后期考虑改为依赖注入方式
+ */
+let globalLiveManager: LiveTradingManager | null = null;
+
+/**
+ * 初始化全局LiveTradingManager
+ * 应在应用启动时调用一次
+ */
+export function initLiveManager(
+  engine: TradingEngine,
+  config: LiveTradingConfig
+): LiveTradingManager {
+  if (globalLiveManager) {
+    throw new Error('LiveTradingManager已初始化');
+  }
+  
+  globalLiveManager = new LiveTradingManager(engine, config);
+  return globalLiveManager;
+}
+
+/**
+ * 获取全局LiveTradingManager实例
+ * 如果未初始化，抛出错误
+ */
+export function getLiveManager(): LiveTradingManager {
+  if (!globalLiveManager) {
+    throw new Error('LiveTradingManager未初始化，请先调用initLiveManager');
+  }
+  
+  return globalLiveManager;
+}
+
+/**
+ * 重置全局LiveTradingManager（仅用于测试）
+ */
+export function resetLiveManager(): void {
+  globalLiveManager = null;
+}
