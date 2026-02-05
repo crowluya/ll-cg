@@ -1,6 +1,15 @@
 import { z } from 'zod';
 import type { StockData, Position } from '@/types';
 
+// 验证上下文接口
+export interface ValidationContext {
+  availableCapital?: number;
+  currentPosition?: Position;
+  currentPrice?: number;
+  maxPositionRatio?: number;
+  currentDate?: string;
+}
+
 // AI 决策输出 schema
 export const decisionSchema = z.object({
   action: z.enum(['buy', 'sell', 'hold']),
@@ -134,5 +143,167 @@ export function calculateTechnicalIndicators(data: StockData[]): TechnicalIndica
     ma10: calculateMA(data, 10),
     ma20: calculateMA(data, 20),
     rsi: calculateRSI(data, 14),
+  };
+}
+
+// ==================== Phase 4.6: 决策输出验证增强 ====================
+
+/**
+ * 增强的决策 Schema（带条件验证）
+ * - 买入决策必须包含股票和数量
+ * - 卖出决策必须包含股票和数量
+ * - 持有决策不应包含股票和数量
+ */
+export const enhancedDecisionSchema = decisionSchema
+  .refine(
+    (data) => {
+      if (data.action === 'buy') {
+        return data.stock !== undefined && data.quantity !== undefined;
+      }
+      return true;
+    },
+    {
+      message: '买入决策必须包含股票代码和数量',
+      path: ['action'],
+    }
+  )
+  .refine(
+    (data) => {
+      if (data.action === 'sell') {
+        return data.stock !== undefined && data.quantity !== undefined;
+      }
+      return true;
+    },
+    {
+      message: '卖出决策必须包含股票代码和数量',
+      path: ['action'],
+    }
+  )
+  .refine(
+    (data) => {
+      if (data.action === 'hold') {
+        return data.stock === undefined && data.quantity === undefined;
+      }
+      return true;
+    },
+    {
+      message: '持有决策不应包含股票代码和数量',
+      path: ['action'],
+    }
+  );
+
+/**
+ * 验证决策结果
+ */
+export interface DecisionValidationResult {
+  valid: boolean;
+  errors: string[];
+  warnings: string[];
+}
+
+/**
+ * 结合上下文验证决策
+ * Phase 4.6: 决策输出验证增强
+ * @param decision AI 决策
+ * @param context 验证上下文
+ * @returns 验证结果
+ */
+export function validateDecisionWithContext(
+  decision: unknown,
+  context: ValidationContext = {}
+): DecisionValidationResult {
+  const errors: string[] = [];
+  const warnings: string[] = [];
+
+  // 首先使用增强的 schema 验证基本格式
+  const schemaResult = enhancedDecisionSchema.safeParse(decision);
+
+  if (!schemaResult.success) {
+    schemaResult.error.errors.forEach((err) => {
+      errors.push(err.message);
+    });
+    return { valid: false, errors, warnings };
+  }
+
+  const validatedDecision = schemaResult.data;
+
+  // 资金检查（买入决策）
+  if (validatedDecision.action === 'buy') {
+    if (context.availableCapital && context.currentPrice && validatedDecision.quantity) {
+      const requiredAmount = validatedDecision.quantity * context.currentPrice;
+      if (requiredAmount > context.availableCapital) {
+        errors.push(
+          `资金不足: 需要 ${requiredAmount.toFixed(2)} 元，可用 ${context.availableCapital.toFixed(2)} 元`
+        );
+      }
+    } else if (context.availableCapital && validatedDecision.quantity && !context.currentPrice) {
+      // 如果没有提供当前价格，记录警告但仍允许验证通过（价格检查由调用方处理）
+      warnings.push('未提供当前价格，无法进行资金检查');
+    }
+
+    // 持仓比例检查
+    if (context.currentPosition && context.currentPrice && context.maxPositionRatio && validatedDecision.quantity) {
+      const existingValue = context.currentPosition.quantity * context.currentPosition.avgPrice;
+      const newValue = validatedDecision.quantity * context.currentPrice;
+      const totalValue = existingValue + newValue;
+
+      // 简化计算：假设总资产约为可用资金的2倍（现金+持仓）
+      const estimatedTotalAssets = context.availableCapital * 2;
+      const maxValue = estimatedTotalAssets * context.maxPositionRatio;
+
+      if (totalValue >= maxValue) {
+        warnings.push(
+          `持仓比例较高: 买入后市值 ${totalValue.toFixed(2)} 元达到或超过上限 ${maxValue.toFixed(2)} 元`
+        );
+      }
+    }
+
+    // 数量是 100 的整数倍检查
+    if (validatedDecision.quantity && validatedDecision.quantity % 100 !== 0) {
+      warnings.push('买入数量最好是 100 的整数倍（1 手）');
+    }
+  }
+
+  // 持仓检查（卖出决策）
+  if (validatedDecision.action === 'sell') {
+    if (!context.currentPosition) {
+      errors.push('无持仓可卖');
+    } else {
+      // 检查股票代码是否匹配
+      if (validatedDecision.stock && validatedDecision.stock !== context.currentPosition.stock) {
+        errors.push(`持仓股票不匹配: 持有 ${context.currentPosition.stock}，尝试卖出 ${validatedDecision.stock}`);
+      }
+
+      // 检查数量是否超过持仓
+      if (validatedDecision.quantity && validatedDecision.quantity > context.currentPosition.quantity) {
+        errors.push(
+          `卖出数量超过持仓: 持仓 ${context.currentPosition.quantity} 股，尝试卖出 ${validatedDecision.quantity} 股`
+        );
+      }
+
+      // T+1 规则检查
+      if (context.currentPosition && context.currentDate) {
+        const buyDate = new Date(context.currentPosition.buyDate);
+        const currentDate = new Date(context.currentDate);
+        const daysDiff = Math.floor((currentDate.getTime() - buyDate.getTime()) / (1000 * 60 * 60 * 24));
+
+        if (daysDiff < 1) {
+          errors.push('违反 T+1 规则: 当天买入的股票次日才能卖出');
+        }
+      }
+    }
+  }
+
+  // 置信度检查
+  if (validatedDecision.confidence !== undefined) {
+    if (validatedDecision.confidence < 0.3) {
+      warnings.push(`决策置信度较低 (${(validatedDecision.confidence * 100).toFixed(0)}%)，建议谨慎操作`);
+    }
+  }
+
+  return {
+    valid: errors.length === 0,
+    errors,
+    warnings,
   };
 }

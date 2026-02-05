@@ -90,6 +90,7 @@ todos:
       - testing
       - frontend-live
       - frontend-history
+isProject: false
 ---
 
 # A股
@@ -328,8 +329,6 @@ interface StockData {
 }
 ```
 
-
-
 ### 交易记录
 
 ```typescript
@@ -345,8 +344,6 @@ interface Trade {
 }
 ```
 
-
-
 ### 持仓
 
 ```typescript
@@ -357,8 +354,6 @@ interface Position {
   avgPrice: number;  // 平均成本
 }
 ```
-
-
 
 ### 模型账户
 
@@ -373,8 +368,6 @@ interface ModelAccount {
   profit: number;          // 盈亏
 }
 ```
-
-
 
 ### AI决策记录
 
@@ -403,8 +396,6 @@ interface AIDecision {
   };
 }
 ```
-
-
 
 ## 实现细节
 
@@ -452,8 +443,6 @@ const { text, object } = await generateText({
 });
 ```
 
-
-
 ### Drizzle ORM Schema定义示例
 
 ```typescript
@@ -483,8 +472,6 @@ export const aiDecisions = pgTable('ai_decisions', {
   createdAt: timestamp('created_at').defaultNow(),
 });
 ```
-
-
 
 ### Drizzle 连接 Supabase 示例
 
@@ -522,8 +509,6 @@ export default {
   },
 } satisfies Config;
 ```
-
-
 
 ### 新浪财经API调用
 
@@ -598,8 +583,6 @@ llm-cg/
 └── next.config.js
 ```
 
-
-
 ## 环境变量
 
 在项目根目录创建 `.env.local` 文件：
@@ -634,7 +617,6 @@ DATABASE_URL=postgresql://postgres:[YOUR-PASSWORD]@[YOUR-PROJECT-REF].supabase.c
     npx create-next-app@latest llm-cg
   ```
 
-
 选择配置：
 
 - TypeScript: Yes
@@ -653,7 +635,7 @@ DATABASE_URL=postgresql://postgres:[YOUR-PASSWORD]@[YOUR-PROJECT-REF].supabase.c
 - `axios` (HTTP请求)
 - `zod` (数据验证和AI结构化输出)
 
-2. **数据库设置**
+1. **数据库设置**
 
 - 在 Supabase 创建项目并获取数据库连接字符串
 - 创建 `.env.local` 文件，配置 `DATABASE_URL`
@@ -663,14 +645,14 @@ DATABASE_URL=postgresql://postgres:[YOUR-PASSWORD]@[YOUR-PROJECT-REF].supabase.c
 - 实现数据库连接和查询函数
 - 配置 `drizzle.config.ts` 使用 Supabase 连接字符串
 
-3. **数据获取模块**
+1. **数据获取模块**
 
 - 实现新浪财经API调用
 - 处理数据格式转换
 - 添加错误处理和重试机制
 - 实现数据缓存（可选）
 
-4. **AI服务集成**
+1. **AI服务集成**
 
 - 使用Vercel AI SDK配置OpenRouter provider
 - 实现多模型调用接口（DeepSeek, Gemini, Claude等）
@@ -678,7 +660,7 @@ DATABASE_URL=postgresql://postgres:[YOUR-PASSWORD]@[YOUR-PROJECT-REF].supabase.c
 - 设计AI决策提示词模板
 - 实现决策解析和执行逻辑
 
-5. **交易引擎开发**
+1. **交易引擎开发**
 
 - 实现T+1规则逻辑
 - 持仓管理
@@ -686,14 +668,14 @@ DATABASE_URL=postgresql://postgres:[YOUR-PASSWORD]@[YOUR-PROJECT-REF].supabase.c
 - 盈亏计算
 - 集成数据库存储（保存交易记录）
 
-6. **回测系统**
+1. **回测系统**
 
 - 实现时间序列回测
 - 按交易日逐日模拟
 - 在交易时间段内调用AI决策
 - 保存回测结果到数据库
 
-7. **实盘交易系统**
+1. **实盘交易系统**
 
 - 实现实时数据获取
 - 交易时间段判断（9:15-15:00）
@@ -701,7 +683,7 @@ DATABASE_URL=postgresql://postgres:[YOUR-PASSWORD]@[YOUR-PROJECT-REF].supabase.c
 - 自动执行AI决策
 - 实时更新数据库
 
-8. **前端开发**
+1. **前端开发**
 
 - 主页面UI（模式切换、股票选择、模型选择、参数配置）
 - 回测结果展示页面（K线图、盈亏对比、交易记录）
@@ -709,7 +691,7 @@ DATABASE_URL=postgresql://postgres:[YOUR-PASSWORD]@[YOUR-PROJECT-REF].supabase.c
 - 历史记录页面（历史持仓、AI操作记录、交易分析）
 - 响应式设计
 
-9. **API路由开发**
+1. **API路由开发**
 
 - 股票数据API
 - AI决策API
@@ -717,13 +699,13 @@ DATABASE_URL=postgresql://postgres:[YOUR-PASSWORD]@[YOUR-PROJECT-REF].supabase.c
 - 实盘交易API（启动、状态、停止）
 - 历史数据查询API（持仓、决策、交易）
 
-10. **测试和优化**
+1. **测试和优化**
 
 - 单元测试（交易引擎、T+1规则）
 - 集成测试（AI决策、数据库操作）
 - 性能优化（数据库查询优化、API响应优化）
 
-11. **部署到Vercel**
+1. **部署到Vercel**
 
 - 在 Vercel 项目设置中配置环境变量：
 - `OPENROUTER_API_KEY`
@@ -747,19 +729,20 @@ DATABASE_URL=postgresql://postgres:[YOUR-PASSWORD]@[YOUR-PROJECT-REF].supabase.c
 - 使用 `loading.tsx` 和 `error.tsx` 处理加载和错误状态
 - 利用 Streaming 和 Suspense 优化用户体验
 
-2. **API限制**：新浪财经API可能有频率限制，需要实现请求队列和缓存
-3. **数据准确性**：验证获取的数据格式和完整性
-4. **T+1规则**：严格实现T+1逻辑，包括做T的情况
-5. **错误处理**：网络错误、API错误、数据异常等情况的处理
-6. **性能优化**：
+1. **API限制**：新浪财经API可能有频率限制，需要实现请求队列和缓存
+2. **数据准确性**：验证获取的数据格式和完整性
+3. **T+1规则**：严格实现T+1逻辑，包括做T的情况
+4. **错误处理**：网络错误、API错误、数据异常等情况的处理
+5. **性能优化**：
 
 - 大量数据回测时的性能考虑
 - 使用 Next.js 16.1 的 Streaming 和 Suspense
 - 合理使用 `loading.tsx` 和 `error.tsx`
 - 利用 React Server Components 减少客户端 JavaScript 体积
 
-7. **数据库优化**：合理使用索引，优化查询性能，考虑分页查询
-8. **实盘交易定时任务**：使用Vercel Cron Jobs实现定时执行，注意时区设置
-9. **AI结构化输出**：使用zod schema确保AI输出格式正确，处理解析错误
-10. **数据库迁移**：使用Drizzle Kit管理数据库迁移，确保生产环境数据一致性
-11. **类型安全**：充分利用 TypeScript 和 Next.js 的类型推断，确保类型安全
+1. **数据库优化**：合理使用索引，优化查询性能，考虑分页查询
+2. **实盘交易定时任务**：使用Vercel Cron Jobs实现定时执行，注意时区设置
+3. **AI结构化输出**：使用zod schema确保AI输出格式正确，处理解析错误
+4. **数据库迁移**：使用Drizzle Kit管理数据库迁移，确保生产环境数据一致性
+5. **类型安全**：充分利用 TypeScript 和 Next.js 的类型推断，确保类型安全
+

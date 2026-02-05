@@ -1,16 +1,30 @@
 import type { ModelAccount, Position, Trade } from '@/types';
 import { saveTrade, savePositionSnapshot, saveAccountSnapshot } from '@/lib/db/queries';
-import { getTradingEngine } from './engine';
+import type { TradingEngine } from './engine';
 
 /**
  * 模型账户管理器
  * 负责管理多个AI模型的交易账户
+ * 
+ * Phase 5修复：遵循constitution.md第3.2条，使用依赖注入
  */
 export class ModelAccountManager {
+  private readonly engine: TradingEngine;
   private readonly initialCapital: number;
   private readonly enablePersistence: boolean;
 
-  constructor(initialCapital: number = 100000, enablePersistence: boolean = true) {
+  /**
+   * 构造函数
+   * @param engine 交易引擎实例（依赖注入）
+   * @param initialCapital 初始资金
+   * @param enablePersistence 是否启用持久化
+   */
+  constructor(
+    engine: TradingEngine,
+    initialCapital: number = 100000,
+    enablePersistence: boolean = true
+  ) {
+    this.engine = engine;
     this.initialCapital = initialCapital;
     this.enablePersistence = enablePersistence;
   }
@@ -19,24 +33,21 @@ export class ModelAccountManager {
    * 创建模型账户
    */
   createAccount(model: string): ModelAccount {
-    const engine = getTradingEngine();
-    return engine.getOrCreateAccount(model);
+    return this.engine.getOrCreateAccount(model);
   }
 
   /**
    * 获取账户信息
    */
   getAccount(model: string): ModelAccount | undefined {
-    const engine = getTradingEngine();
-    return engine.getAccount(model);
+    return this.engine.getAccount(model);
   }
 
   /**
    * 获取所有账户
    */
   getAllAccounts(): ModelAccount[] {
-    const engine = getTradingEngine();
-    return engine.getAllAccounts();
+    return this.engine.getAllAccounts();
   }
 
   /**
@@ -147,16 +158,14 @@ export class ModelAccountManager {
    * 重置模型账户
    */
   resetAccount(model: string): void {
-    const engine = getTradingEngine();
-    engine.resetAccount(model);
+    this.engine.resetAccount(model);
   }
 
   /**
    * 重置所有账户
    */
   resetAll(): void {
-    const engine = getTradingEngine();
-    engine.resetAll();
+    this.engine.resetAll();
   }
 
   /**
@@ -229,21 +238,58 @@ export class ModelAccountManager {
   }
 }
 
-// 全局账户管理器实例
+// ==================== 工厂类 ====================
+
+/**
+ * 账户管理器工厂
+ * 用于创建ModelAccountManager实例
+ */
+export class AccountManagerFactory {
+  /**
+   * 创建账户管理器
+   * @param engine 交易引擎实例
+   * @param initialCapital 初始资金
+   * @param enablePersistence 是否启用持久化
+   */
+  create(
+    engine: TradingEngine,
+    initialCapital: number = 100000,
+    enablePersistence: boolean = true
+  ): ModelAccountManager {
+    return new ModelAccountManager(engine, initialCapital, enablePersistence);
+  }
+}
+
+// ==================== 向后兼容API（临时） ====================
+// 注意：这些API违反constitution.md第3.2条，仅用于向后兼容
+// TODO: 逐步迁移到 AccountManagerFactory
+
+import { getTradingEngine } from './engine';
+
+/**
+ * 全局账户管理器实例（仅用于向后兼容）
+ * @deprecated 请使用 AccountManagerFactory 代替
+ */
 let globalAccountManager: ModelAccountManager | null = null;
 
 /**
  * 获取全局账户管理器
+ * @deprecated 请使用 AccountManagerFactory.create(engine) 代替
+ * 
+ * 违反constitution.md第3.2条：使用全局变量
+ * 仅用于向后兼容，将在Phase 6中移除
  */
 export function getAccountManager(): ModelAccountManager {
   if (!globalAccountManager) {
-    globalAccountManager = new ModelAccountManager();
+    const engine = getTradingEngine();
+    globalAccountManager = new ModelAccountManager(engine);
   }
   return globalAccountManager;
 }
 
 /**
  * 重置全局账户管理器
+ * @deprecated 请使用 AccountManagerFactory 代替
  */
 export function resetAccountManager(): void {
   globalAccountManager = null;

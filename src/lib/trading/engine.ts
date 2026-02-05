@@ -333,22 +333,72 @@ export class TradingEngine {
   }
 }
 
-// 创建全局交易引擎实例
-let globalEngine: TradingEngine | null = null;
+/**
+ * 交易引擎工厂类
+ * 遵循constitution.md第3.2条：无全局变量，使用依赖注入
+ */
+export class TradingEngineFactory {
+  private engines: Map<string, TradingEngine> = new Map();
+
+  /**
+   * 为指定用户创建或获取交易引擎实例
+   * @param userId 用户ID，确保用户数据隔离
+   * @param initialCapital 初始资金
+   */
+  getEngine(userId: string, initialCapital: number = 100000): TradingEngine {
+    if (!this.engines.has(userId)) {
+      this.engines.set(userId, new TradingEngine(initialCapital));
+    }
+    return this.engines.get(userId)!;
+  }
+
+  /**
+   * 移除指定用户的交易引擎
+   */
+  removeEngine(userId: string): void {
+    this.engines.delete(userId);
+  }
+
+  /**
+   * 清空所有引擎（测试用）
+   */
+  clear(): void {
+    this.engines.clear();
+  }
+
+  /**
+   * 获取所有用户的引擎（管理用）
+   */
+  getAllEngines(): Map<string, TradingEngine> {
+    return new Map(this.engines);
+  }
+}
+
+// ==================== 向后兼容API（临时） ====================
+// 注意：这些API违反constitution.md第3.2条，仅用于向后兼容
+// TODO: 逐步迁移到 TradingEngineFactory
 
 /**
- * 获取全局交易引擎实例
+ * 全局工厂实例（仅用于向后兼容）
+ * @deprecated 请使用 TradingEngineFactory 代替
+ */
+const globalFactory = new TradingEngineFactory();
+
+/**
+ * 获取默认用户的交易引擎
+ * @deprecated 请使用 TradingEngineFactory.getEngine(userId) 代替
+ * 
+ * 违反constitution.md第3.2条：使用全局变量
+ * 仅用于向后兼容，将在Phase 6中移除
  */
 export function getTradingEngine(): TradingEngine {
-  if (!globalEngine) {
-    globalEngine = new TradingEngine();
-  }
-  return globalEngine;
+  return globalFactory.getEngine('default');
 }
 
 /**
- * 重置全局交易引擎
+ * 重置默认用户的交易引擎
+ * @deprecated 请使用 TradingEngineFactory.removeEngine(userId) 代替
  */
 export function resetTradingEngine(): void {
-  globalEngine = null;
+  globalFactory.removeEngine('default');
 }

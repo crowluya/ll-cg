@@ -1,4 +1,20 @@
-import type { Position, StockData } from '@/types';
+import type { Position, StockData, Account, RealtimeQuote } from '@/types';
+// Phase 3: 从 sina-api 导入并重新导出涨跌停检测函数
+import {
+  calcLimitPrice,
+  isLimitUp,
+  isLimitDown,
+  isSuspended,
+} from '@/lib/data/sina-api';
+import { formatDate } from '@/lib/utils/date';
+
+// 重新导出供外部使用
+export {
+  calcLimitPrice,
+  isLimitUp,
+  isLimitDown,
+  isSuspended,
+};
 
 /**
  * 检查持仓是否可卖出
@@ -20,9 +36,15 @@ export function canSellPosition(position: Position, currentDate: string): boolea
 /**
  * 检查是否是交易日
  * @param date 日期字符串 YYYY-MM-DD
+ * @param holidays 节假日列表（可选）
  * @returns 是否是交易日
  */
-export function isTradingDay(date: string): boolean {
+export function isTradingDay(date: string, holidays: string[] = []): boolean {
+  // 检查是否在节假日列表中
+  if (holidays.includes(date)) {
+    return false;
+  }
+
   const dateObj = new Date(date);
   const dayOfWeek = dateObj.getDay();
 
@@ -31,7 +53,6 @@ export function isTradingDay(date: string): boolean {
     return false;
   }
 
-  // TODO: 可以添加节假日判断
   return true;
 }
 
@@ -183,6 +204,121 @@ export function validateSellOrder(
 }
 
 /**
+ * 验证买入订单（扩展版，含持仓上限检查）
+ * @param account 账户信息
+ * @param stock 股票代码
+ * @param quantity 数量
+ * @param price 价格
+ * @param maxRatio 最大持仓比例（默认 0.5 = 50%）
+ * @returns 验证结果
+ */
+export function validateBuyOrderWithPositionLimit(
+  account: Account,
+  stock: string,
+  quantity: number,
+  price: number,
+  maxRatio: number = 0.5
+): {
+  valid: boolean;
+  error?: string;
+} {
+  const capital = account.cash;
+  const buyValue = quantity * price;
+
+  // 基础验证
+  const baseResult = validateBuyOrder(stock, quantity, price, capital);
+  if (!baseResult.valid) {
+    return baseResult;
+  }
+
+  // 持仓上限验证 - 将 reason 转换为 error
+  const limitResult = checkPositionLimit(account, stock, buyValue, maxRatio);
+  if (!limitResult.valid) {
+    return { valid: false, error: limitResult.reason };
+  }
+
+  return { valid: true };
+}
+
+/**
+ * 验证买入订单（完整版，含实时行情和持仓上限检查）
+ * @param account 账户信息
+ * @param stock 股票代码
+ * @param quantity 数量
+ * @param price 价格
+ * @param quote 实时行情（可选）
+ * @param maxRatio 最大持仓比例（默认 0.5 = 50%）
+ * @returns 验证结果
+ */
+export function validateBuyOrderFull(
+  account: Account,
+  stock: string,
+  quantity: number,
+  price: number,
+  quote: RealtimeQuote | null = null,
+  maxRatio: number = 0.5
+): {
+  valid: boolean;
+  error?: string;
+} {
+  // 先进行基础验证和持仓上限检查
+  const baseResult = validateBuyOrderWithPositionLimit(account, stock, quantity, price, maxRatio);
+  if (!baseResult.valid) {
+    return baseResult;
+  }
+
+  // 检查停牌（如果提供了行情数据）
+  if (quote && isSuspended(quote.volume, quote.price, quote.close)) {
+    return { valid: false, error: `该股票已停牌，无法买入` };
+  }
+
+  // 检查涨停（无法买入）
+  if (quote && isLimitUp(quote.price, quote.close, stock)) {
+    return { valid: false, error: `该股票已涨停，无法买入` };
+  }
+
+  return { valid: true };
+}
+
+/**
+ * 验证卖出订单（扩展版，含停牌检查）
+ * @param stock 股票代码
+ * @param quantity 数量
+ * @param position 持仓信息
+ * @param currentDate 当前日期
+ * @param quote 实时行情（可选）
+ * @returns 验证结果
+ */
+export function validateSellOrderWithQuote(
+  stock: string,
+  quantity: number,
+  position: Position | undefined,
+  currentDate: string,
+  quote: RealtimeQuote | null = null
+): {
+  valid: boolean;
+  error?: string;
+} {
+  // 基础验证
+  const baseResult = validateSellOrder(stock, quantity, position, currentDate);
+  if (!baseResult.valid) {
+    return baseResult;
+  }
+
+  // 检查停牌（如果提供了行情数据）
+  if (quote && isSuspended(quote.volume, quote.price, quote.close)) {
+    return { valid: false, error: `该股票已停牌，无法卖出` };
+  }
+
+  // 检查跌停（无法卖出）
+  if (quote && isLimitDown(quote.price, quote.close, stock)) {
+    return { valid: false, error: `该股票已跌停，无法卖出` };
+  }
+
+  return { valid: true };
+}
+
+/**
  * 计算交易手续费
  * @param amount 交易金额
  * @param type 交易类型 buy/sell
@@ -282,42 +418,125 @@ export function calculateProfit(
  * 获取下一个交易日
  * @param date 当前日期
  * @param days 增加天数
+ * @param holidays 节假日列表（可选）
  * @returns 下一个交易日 YYYY-MM-DD
  */
-export function getNextTradingDay(date: string, days: number = 1): string {
+export function getNextTradingDay(date: string, days: number = 1, holidays: string[] = []): string {
   const result = new Date(date);
   let addedDays = 0;
 
   while (addedDays < days) {
     result.setDate(result.getDate() + 1);
-    const dateStr = result.toISOString().split('T')[0];
+    const dateStr = formatDate(result);
 
-    if (isTradingDay(dateStr)) {
+    if (isTradingDay(dateStr, holidays)) {
       addedDays++;
     }
   }
 
-  return result.toISOString().split('T')[0];
+  return formatDate(result);
 }
 
 /**
  * 获取交易日列表
  * @param startDate 开始日期
  * @param endDate 结束日期
+ * @param holidays 节假日列表（可选）
  * @returns 交易日列表
  */
-export function getTradingDays(startDate: string, endDate: string): string[] {
+export function getTradingDays(startDate: string, endDate: string, holidays: string[] = []): string[] {
   const tradingDays: string[] = [];
   const current = new Date(startDate);
   const end = new Date(endDate);
 
   while (current <= end) {
-    const dateStr = current.toISOString().split('T')[0];
-    if (isTradingDay(dateStr)) {
+    const dateStr = formatDate(current);
+    if (isTradingDay(dateStr, holidays)) {
       tradingDays.push(dateStr);
     }
     current.setDate(current.getDate() + 1);
   }
 
   return tradingDays;
+}
+
+/**
+ * 获取指定日期往前推 N 个交易日的日期列表
+ * @param endDate 结束日期
+ * @param count 交易日数量
+ * @param holidays 节假日列表（可选）
+ * @returns 交易日列表（从近到远）
+ */
+export function getTradingDateRange(endDate: string, count: number, holidays: string[] = []): string[] {
+  // 边界验证
+  if (count <= 0) {
+    return [];
+  }
+
+  const current = new Date(endDate);
+
+  // 检查日期是否有效
+  if (isNaN(current.getTime())) {
+    return [];
+  }
+
+  const result: string[] = [];
+  const earliestYear = 2000;
+
+  while (result.length < count && current.getFullYear() > earliestYear) {
+    const dateStr = formatDate(current);
+    if (isTradingDay(dateStr, holidays)) {
+      result.push(dateStr);
+    }
+    current.setDate(current.getDate() - 1);
+  }
+
+  return result;
+}
+
+/**
+ * 检查持仓上限
+ * @param account 账户信息
+ * @param stock 股票代码
+ * @param newBuyValue 新买入金额
+ * @param maxRatio 最大持仓比例（默认 0.5 = 50%）
+ * @returns 验证结果
+ */
+export function checkPositionLimit(
+  account: Account,
+  stock: string,
+  newBuyValue: number,
+  maxRatio: number = 0.5
+): {
+  valid: boolean;
+  reason?: string;
+} {
+  // 输入验证
+  if (newBuyValue <= 0) {
+    return { valid: false, reason: '买入金额必须大于0' };
+  }
+  if (maxRatio <= 0 || maxRatio > 1) {
+    return { valid: false, reason: '持仓比例必须在 0-1 之间' };
+  }
+
+  // 计算该股票已有持仓市值
+  const existingPosition = account.positions.find(p => p.stock === stock);
+  const existingValue = existingPosition ? existingPosition.quantity * existingPosition.avgPrice : 0;
+
+  // 买入后该股票总市值
+  const totalValueAfterBuy = existingValue + newBuyValue;
+
+  // 允许的该股票最大市值
+  const maxValue = account.totalValue * maxRatio;
+
+  // 使用小的容差避免浮点数精度问题
+  const EPSILON = 0.01;
+  if (totalValueAfterBuy > maxValue + EPSILON) {
+    return {
+      valid: false,
+      reason: `持仓超限: ${stock} 买入后市值 ${totalValueAfterBuy.toFixed(2)} 元超过上限 ${maxValue.toFixed(2)} 元 (${(maxRatio * 100).toFixed(0)}%)`,
+    };
+  }
+
+  return { valid: true };
 }

@@ -1,17 +1,18 @@
 /**
  * 交易引擎单元测试
  * 测试文件: src/lib/trading/engine.test.ts
+ * 
+ * Phase 修复: 移除全局变量，改为依赖注入测试
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { TradingEngine, resetTradingEngine } from './engine';
+import { TradingEngine, TradingEngineFactory } from './engine';
 
 describe('TradingEngine', () => {
   let engine: TradingEngine;
 
   beforeEach(() => {
     engine = new TradingEngine(100000);
-    resetTradingEngine();
   });
 
   // ============= 初始化测试 =============
@@ -361,6 +362,123 @@ describe('TradingEngine', () => {
 
       const allAccounts = engine.getAllAccounts();
       expect(allAccounts).toHaveLength(2);
+    });
+  });
+});
+
+// ============= TradingEngineFactory 测试 =============
+
+describe('TradingEngineFactory', () => {
+  let factory: TradingEngineFactory;
+
+  beforeEach(() => {
+    factory = new TradingEngineFactory();
+  });
+
+  afterEach(() => {
+    factory.clear();
+  });
+
+  describe('用户数据隔离', () => {
+    it('不同用户获得独立的交易引擎实例', () => {
+      const engine1 = factory.getEngine('user1');
+      const engine2 = factory.getEngine('user2');
+
+      expect(engine1).not.toBe(engine2);
+    });
+
+    it('同一用户多次获取返回相同实例', () => {
+      const engine1 = factory.getEngine('user1');
+      const engine2 = factory.getEngine('user1');
+
+      expect(engine1).toBe(engine2);
+    });
+
+    it('用户间交易数据完全隔离', () => {
+      const engine1 = factory.getEngine('user1');
+      const engine2 = factory.getEngine('user2');
+
+      // 用户1执行交易
+      engine1.executeBuy('deepseek', 'sz000001', 100, 10.5, '2024-01-02');
+      
+      // 用户2的账户不受影响
+      const account1 = engine1.getAccount('deepseek')!;
+      const account2 = engine2.getOrCreateAccount('deepseek');
+
+      expect(account1.currentCapital).toBeLessThan(100000);
+      expect(account2.currentCapital).toBe(100000);
+      expect(account1.positions.length).toBe(1);
+      expect(account2.positions.length).toBe(0);
+    });
+
+    it('支持自定义初始资金', () => {
+      const engine = factory.getEngine('user1', 200000);
+      const account = engine.getOrCreateAccount('deepseek');
+      
+      expect(account.initialCapital).toBe(200000);
+      expect(account.currentCapital).toBe(200000);
+    });
+  });
+
+  describe('引擎管理', () => {
+    it('removeEngine 正确移除用户引擎', () => {
+      factory.getEngine('user1');
+      expect(factory.getAllEngines().has('user1')).toBe(true);
+
+      factory.removeEngine('user1');
+      expect(factory.getAllEngines().has('user1')).toBe(false);
+    });
+
+    it('clear 清空所有引擎', () => {
+      factory.getEngine('user1');
+      factory.getEngine('user2');
+      expect(factory.getAllEngines().size).toBe(2);
+
+      factory.clear();
+      expect(factory.getAllEngines().size).toBe(0);
+    });
+
+    it('getAllEngines 返回所有引擎的副本', () => {
+      factory.getEngine('user1');
+      const engines = factory.getAllEngines();
+      
+      // 修改返回的Map不影响内部状态
+      engines.clear();
+      expect(factory.getAllEngines().size).toBe(1);
+    });
+  });
+
+  describe('表格驱动测试：多用户场景', () => {
+    const testCases = [
+      { userId: 'user1', model: 'deepseek', initialCapital: 100000 },
+      { userId: 'user2', model: 'gemini', initialCapital: 150000 },
+      { userId: 'user3', model: 'claude', initialCapital: 200000 },
+    ];
+
+    it('多用户并发交易互不影响', () => {
+      const results: Array<{ userId: string; success: boolean; capital: number }> = [];
+
+      for (const tc of testCases) {
+        const engine = factory.getEngine(tc.userId, tc.initialCapital);
+        const result = engine.executeBuy(tc.model, 'sz000001', 100, 10.0, '2024-01-02');
+        const account = engine.getAccount(tc.model)!;
+
+        results.push({
+          userId: tc.userId,
+          success: result.success,
+          capital: account.currentCapital,
+        });
+      }
+
+      // 验证所有交易都成功
+      for (const result of results) {
+        expect(result.success).toBe(true);
+        expect(result.capital).toBeLessThan(200000); // 都应该减少了资金
+      }
+
+      // 验证用户间数据隔离
+      expect(results[0].capital).not.toBe(results[1].capital);
+      expect(results[1].capital).not.toBe(results[2].capital);
     });
   });
 });

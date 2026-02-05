@@ -8,7 +8,14 @@ import {
   validateAIDecision,
   aggregateDecisions,
   formatDecision,
+  buildDecisionInput,
+  saveDecisionRecord,
 } from './decision';
+
+// Mock saveAIDecision from db/queries
+vi.mock('@/lib/db/queries', () => ({
+  saveAIDecision: vi.fn((record) => Promise.resolve('mock-id')),
+}));
 import type { AIDecision, DecisionInput } from '@/types';
 import type { AIModelKey } from '@/types';
 
@@ -327,6 +334,241 @@ describe('ai/decision', () => {
       expect(formatted).toContain('持有');
       expect(formatted).toContain('市场震荡');
       expect(formatted).not.toContain('股票:');
+    });
+  });
+
+  // ============= buildDecisionInput 测试 (Phase 4.3-4.4) =============
+
+  describe('buildDecisionInput', () => {
+    it('应该组装完整的决策输入', async () => {
+      const params = {
+        stockCode: 'sz000001',
+        currentDate: '2024-01-03',
+        availableCapital: 100000,
+        historyData: [
+          {
+            code: 'sz000001',
+            date: '2024-01-02',
+            open: 10.0,
+            high: 10.5,
+            low: 9.8,
+            close: 10.3,
+            volume: 1000000,
+          },
+        ],
+        currentPosition: {
+          stock: 'sz000001',
+          quantity: 100,
+          buyDate: '2024-01-02',
+          avgPrice: 10.0,
+        },
+      };
+
+      const input = await buildDecisionInput(params);
+
+      expect(input.stockCode).toBe('sz000001');
+      expect(input.currentDate).toBe('2024-01-03');
+      expect(input.availableCapital).toBe(100000);
+      expect(input.historyData).toBeDefined();
+      expect(input.currentPosition).toBeDefined();
+    });
+
+    it('应该处理缺失的持仓数据', async () => {
+      const params = {
+        stockCode: 'sz000001',
+        currentDate: '2024-01-03',
+        availableCapital: 100000,
+        historyData: [],
+      };
+
+      const input = await buildDecisionInput(params);
+
+      expect(input.currentPosition).toBeUndefined();
+      expect(input.historyData).toEqual([]);
+    });
+
+    it('应该使用默认日期', async () => {
+      const params = {
+        stockCode: 'sz000001',
+        availableCapital: 100000,
+        historyData: [],
+      };
+
+      const input = await buildDecisionInput(params);
+
+      expect(input.currentDate).toBeDefined();
+      expect(input.currentDate).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    });
+
+    it('应该包含账户信息（如果提供）', async () => {
+      const mockAccount = {
+        agentId: 'agent-1',
+        initialCapital: 100000,
+        cash: 50000,
+        positions: [],
+        totalValue: 100000,
+        marketValue: 50000,
+        profit: 0,
+        profitRate: 0,
+        dailyProfit: 0,
+        dailyProfitRate: 0,
+      };
+
+      const params = {
+        stockCode: 'sz000001',
+        availableCapital: 100000,
+        historyData: [],
+        account: mockAccount,
+      };
+
+      const input = await buildDecisionInput(params);
+
+      expect(input.account).toBeDefined();
+      expect(input.account?.cash).toBe(50000);
+    });
+
+    it('应该包含交易配置（如果提供）', async () => {
+      const mockConfig = {
+        thinkInterval: 30,
+        initialCapital: 100000,
+        maxPositionRatio: 0.3,
+        tradingHours: {
+          morning: { start: '09:15', end: '11:30' },
+          afternoon: { start: '13:00', end: '15:00' },
+        },
+      };
+
+      const params = {
+        stockCode: 'sz000001',
+        availableCapital: 100000,
+        historyData: [],
+        config: mockConfig,
+      };
+
+      const input = await buildDecisionInput(params);
+
+      expect(input.config).toBeDefined();
+      expect(input.config?.maxPositionRatio).toBe(0.3);
+    });
+
+    it('应该包含当前时间', async () => {
+      const before = new Date();
+
+      const params = {
+        stockCode: 'sz000001',
+        availableCapital: 100000,
+        historyData: [],
+      };
+
+      const input = await buildDecisionInput(params);
+
+      const after = new Date();
+
+      expect(input.currentTime).toBeDefined();
+      const inputTime = new Date(input.currentTime!);
+      expect(inputTime.getTime()).toBeGreaterThanOrEqual(before.getTime());
+      expect(inputTime.getTime()).toBeLessThanOrEqual(after.getTime());
+    });
+  });
+
+  // ============= saveDecisionRecord 测试 (Phase 4.7-4.8) =============
+
+  describe('saveDecisionRecord', () => {
+    it('应该保存决策记录到数据库', async () => {
+      const decision = {
+        action: 'buy' as const,
+        stock: 'sz000001',
+        quantity: 100,
+        reason: '技术面强势突破',
+        confidence: 0.8,
+      };
+
+      const input = {
+        stockCode: 'sz000001',
+        currentDate: '2024-01-03',
+        availableCapital: 100000,
+        historyData: [],
+      };
+
+      const result = await saveDecisionRecord('deepseek', decision, input, {
+        executed: true,
+        tradeId: 'trade-123',
+      });
+
+      expect(result).toBeDefined();
+      expect(typeof result).toBe('string');
+    });
+
+    it('应该包含执行结果', async () => {
+      const decision = {
+        action: 'hold' as const,
+        reason: '市场震荡，观望',
+      };
+
+      const input = {
+        stockCode: 'sz000001',
+        currentDate: '2024-01-03',
+        availableCapital: 100000,
+        historyData: [],
+      };
+
+      const result = await saveDecisionRecord('claude', decision, input, {
+        executed: false,
+      });
+
+      expect(result).toBeDefined();
+    });
+
+    it('应该包含错误信息（如果执行失败）', async () => {
+      const decision = {
+        action: 'buy' as const,
+        stock: 'sz000001',
+        quantity: 100,
+        reason: '测试',
+      };
+
+      const input = {
+        stockCode: 'sz000001',
+        currentDate: '2024-01-03',
+        availableCapital: 100000,
+        historyData: [],
+      };
+
+      const result = await saveDecisionRecord('gemini', decision, input, {
+        executed: false,
+        error: '资金不足',
+      });
+
+      expect(result).toBeDefined();
+    });
+
+    it('应该正确格式化决策记录', async () => {
+      const decision = {
+        action: 'sell' as const,
+        stock: 'sz000001',
+        quantity: 50,
+        reason: '获利了结',
+      };
+
+      const input = {
+        stockCode: 'sz000001',
+        currentDate: '2024-01-03',
+        availableCapital: 100000,
+        historyData: [],
+        currentPosition: {
+          stock: 'sz000001',
+          quantity: 1000,
+          buyDate: '2024-01-02',
+          avgPrice: 10.0,
+        },
+      };
+
+      const result = await saveDecisionRecord('deepseek', decision, input, {
+        executed: true,
+        tradeId: 'trade-456',
+      });
+
+      expect(result).toBeDefined();
     });
   });
 });

@@ -1,7 +1,79 @@
 import { callOpenRouter, streamOpenRouter, getModelId, isApiKeyConfigured } from './client';
-import { decisionSchema, type AIDecision, type DecisionInput } from './schema';
+import { decisionSchema, type AIDecision, type DecisionInput, type ValidationContext } from './schema';
 import { generateTradingPrompt, SYSTEM_PROMPT } from './prompts';
-import type { AIModelKey } from '@/types';
+import { saveAIDecision } from '@/lib/db/queries';
+import { formatDate } from '@/lib/utils/date';
+import { validateDecisionWithContext } from './schema';
+import type { AIModelKey, Account, TradingConfig, Position, StockData, AIDecisionRecord, RealtimeQuote, IntradayPoint } from '@/types';
+
+// buildDecisionInput 参数接口
+export interface BuildDecisionInputParams {
+  stockCode: string;
+  currentDate?: string;
+  availableCapital: number;
+  historyData: StockData[];
+  currentPosition?: Position;
+  account?: Account;
+  config?: TradingConfig;
+  realtimeQuotes?: Map<string, RealtimeQuote>;
+  intradayData?: IntradayPoint[];
+}
+
+/**
+ * 构建决策输入
+ * Phase 4.4: 决策输入组装
+ * @param params 构建参数
+ * @returns 完整的决策输入
+ */
+export async function buildDecisionInput(
+  params: BuildDecisionInputParams
+): Promise<DecisionInput> {
+  const {
+    stockCode,
+    currentDate,
+    availableCapital,
+    historyData,
+    currentPosition,
+    account,
+    config,
+    realtimeQuotes,
+    intradayData,
+  } = params;
+
+  // 获取当前日期（默认今天）
+  const today = new Date();
+  const formattedDate = currentDate ?? formatDate(today);
+
+  // 构建决策输入
+  const input: DecisionInput = {
+    stockCode,
+    currentDate: formattedDate,
+    availableCapital,
+    historyData: historyData ?? [],
+  };
+
+  // 可选字段
+  if (currentPosition) {
+    input.currentPosition = currentPosition;
+  }
+  if (account) {
+    input.account = account;
+  }
+  if (config) {
+    input.config = config;
+  }
+  if (realtimeQuotes) {
+    input.realtimeQuotes = realtimeQuotes;
+  }
+  if (intradayData) {
+    input.intradayData = intradayData;
+  }
+
+  // 添加当前时间戳
+  input.currentTime = new Date().toISOString();
+
+  return input;
+}
 
 /**
  * 获取 AI 交易决策
@@ -195,10 +267,14 @@ export function validateAIDecision(
       errors.push('买入决策必须指定数量');
     } else {
       // 检查资金是否充足
-      const latestPrice = input.historyData[input.historyData.length - 1]?.close || 100;
-      const requiredAmount = decision.quantity * latestPrice;
-      if (requiredAmount > input.availableCapital) {
-        errors.push(`资金不足: 需要${requiredAmount.toFixed(2)}元，可用${input.availableCapital.toFixed(2)}元`);
+      if (input.historyData.length > 0) {
+        const latestPrice = input.historyData[input.historyData.length - 1].close;
+        const requiredAmount = decision.quantity * latestPrice;
+        if (requiredAmount > input.availableCapital) {
+          errors.push(`资金不足: 需要${requiredAmount.toFixed(2)}元，可用${input.availableCapital.toFixed(2)}元`);
+        }
+      } else {
+        warnings.push('无历史数据，无法验证资金是否充足');
       }
       // 检查数量是否是100的整数倍
       if (decision.quantity % 100 !== 0) {
@@ -306,4 +382,60 @@ export function formatDecision(decision: AIDecision): string {
   text += `\n理由:\n${decision.reason}`;
 
   return text;
+}
+
+// Re-export validateDecisionWithContext from schema for convenience
+export { validateDecisionWithContext };
+
+// ==================== Phase 4.8: 决策记录保存 ====================
+
+/**
+ * 决策执行结果接口
+ */
+export interface DecisionExecutionResult {
+  executed: boolean;
+  tradeId?: string;
+  error?: string;
+}
+
+/**
+ * 保存决策记录
+ * Phase 4.8: 决策记录保存
+ * @param model AI 模型
+ * @param decision AI 决策
+ * @param input 决策输入
+ * @param result 执行结果
+ * @returns 决策记录 ID
+ */
+export async function saveDecisionRecord(
+  model: AIModelKey,
+  decision: AIDecision,
+  input: DecisionInput,
+  result: DecisionExecutionResult
+): Promise<string> {
+  // 构建决策记录
+  const record: AIDecisionRecord = {
+    id: `${model}-${decision.stock || 'hold'}-${Date.now()}`,
+    model,
+    stock: decision.stock || input.stockCode,
+    decisionTime: new Date(),
+    inputData: {
+      historyData: input.historyData,
+      currentPosition: input.currentPosition,
+      availableCapital: input.availableCapital,
+      currentDate: input.currentDate,
+    },
+    outputDecision: decision,
+    executionResult: result,
+  };
+
+  // 保存到数据库
+  try {
+    const recordId = await saveAIDecision(record);
+    return recordId;
+  } catch (error) {
+    console.error('Failed to save decision record:', error);
+    // 即使保存失败，也返回记录 ID 用于日志追踪
+    return record.id;
+  }
 }
