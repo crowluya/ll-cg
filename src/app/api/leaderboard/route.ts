@@ -119,16 +119,18 @@ async function getTodayLeaderboard(limit: number): Promise<LeaderboardEntry[]> {
   
   // 获取今日快照
   const todaySnapshots = await getAccountSnapshots({
-    startDate: new Date(today),
-    endDate: new Date(today),
+    startDate: today,
+    endDate: today,
   });
 
   // 获取昨日快照
   const yesterday = new Date();
   yesterday.setDate(yesterday.getDate() - 1);
+  const yesterdayDate = formatDate(yesterday);
+  
   const yesterdaySnapshots = await getAccountSnapshots({
-    startDate: yesterday,
-    endDate: yesterday,
+    startDate: yesterdayDate,
+    endDate: yesterdayDate,
   });
 
   // 计算今日收益
