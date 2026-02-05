@@ -18,6 +18,7 @@ import {
   setCachedStockData,
   getOrSetStockData,
   getCacheStats,
+  mergeRequest,
 } from './cache';
 import type { StockData } from '@/types';
 
@@ -289,6 +290,115 @@ describe('cache', () => {
 
       expect(stats.size).toBe(0);
       expect(stats.keys).toEqual([]);
+    });
+  });
+
+  // ============= Phase 2.7: mergeRequest 请求合并测试 =============
+
+  describe('Phase 2.7: mergeRequest 请求合并', () => {
+    it('相同 key 的并发请求应该合并为一次调用', async () => {
+      let callCount = 0;
+      const fetchFn = vi.fn(async () => {
+        callCount++;
+        await new Promise(resolve => setTimeout(resolve, 50)); // 模拟延迟
+        return { value: 42 };
+      });
+
+      // 并发调用同一个 key
+      const promises = [
+        mergeRequest('test-key', fetchFn),
+        mergeRequest('test-key', fetchFn),
+        mergeRequest('test-key', fetchFn),
+      ];
+
+      const results = await Promise.all(promises);
+
+      // 验证只调用了一次函数
+      expect(fetchFn).toHaveBeenCalledTimes(1);
+      expect(callCount).toBe(1);
+
+      // 验证所有请求都得到了正确结果
+      expect(results[0]).toEqual({ value: 42 });
+      expect(results[1]).toEqual({ value: 42 });
+      expect(results[2]).toEqual({ value: 42 });
+    });
+
+    it('不同 key 的请求独立执行', async () => {
+      const fetchFn1 = vi.fn().mockResolvedValue({ value: 1 });
+      const fetchFn2 = vi.fn().mockResolvedValue({ value: 2 });
+
+      const results = await Promise.all([
+        mergeRequest('key1', fetchFn1),
+        mergeRequest('key2', fetchFn2),
+      ]);
+
+      expect(fetchFn1).toHaveBeenCalledTimes(1);
+      expect(fetchFn2).toHaveBeenCalledTimes(1);
+      expect(results[0]).toEqual({ value: 1 });
+      expect(results[1]).toEqual({ value: 2 });
+    });
+
+    it('第一个请求完成后，后续相同 key 的请求应重新调用', async () => {
+      let callCount = 0;
+      const fetchFn = vi.fn(async () => {
+        callCount++;
+        await new Promise(resolve => setTimeout(resolve, 50));
+        return { value: callCount };
+      });
+
+      // 第一批并发请求
+      await Promise.all([
+        mergeRequest('test-key', fetchFn),
+        mergeRequest('test-key', fetchFn),
+      ]);
+
+      // 等待第一批完成
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      // 清除缓存以模拟请求过期
+      clearCache();
+
+      // 第二批请求（应该重新调用）
+      const result = await mergeRequest('test-key', fetchFn);
+
+      expect(callCount).toBe(2); // 第一次 + 第二次
+      expect(result).toEqual({ value: 2 });
+    });
+
+    it('请求失败时应该移除待处理状态，允许重试', async () => {
+      const fetchFnSuccess = vi.fn().mockResolvedValue({ value: 42 });
+      const fetchFnFail = vi.fn().mockRejectedValue(new Error('Network error'));
+
+      // 第一次请求失败
+      await expect(mergeRequest('test-key', fetchFnFail)).rejects.toThrow();
+
+      // 第二次请求应该成功（错误状态已清除）
+      const result = await mergeRequest('test-key', fetchFnSuccess);
+      expect(result).toEqual({ value: 42 });
+    });
+
+    it('缓存 TTL 正确生效', async () => {
+      let callCount = 0;
+      const fetchFn = vi.fn(async () => {
+        callCount++;
+        return { value: Date.now() };
+      });
+
+      // 第一次请求
+      const result1 = await mergeRequest('test-key', fetchFn, 50);
+      expect(callCount).toBe(1);
+
+      // 立即第二次请求（应该使用缓存）
+      const result2 = await mergeRequest('test-key', fetchFn, 50);
+      expect(callCount).toBe(1); // 没有增加
+      expect(result1).toEqual(result2);
+
+      // 等待缓存过期
+      await new Promise(resolve => setTimeout(resolve, 70));
+
+      // 缓存过期后应该重新请求
+      const result3 = await mergeRequest('test-key', fetchFn, 50);
+      expect(callCount).toBe(2);
     });
   });
 });

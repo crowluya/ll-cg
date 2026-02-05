@@ -22,6 +22,7 @@ export const users = pgTable('users', {
   password: text('password').notNull(), // bcrypt 哈希
   name: text('name').notNull(),
   role: userRoleEnum('role').notNull().default('trader'),
+  stockPool: jsonb('stock_pool').$type<string[]>(), // 股票池配置（股票代码列表）
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
 
@@ -30,11 +31,13 @@ export const trades = pgTable('trades', {
   id: text('id').primaryKey(),
   model: text('model').notNull(),
   stock: text('stock').notNull(),
+  stockName: text('stock_name').notNull(), // 股票名称
   type: tradeTypeEnum('type').notNull(),
   price: numeric('price', { precision: 10, scale: 2 }).notNull(),
   quantity: numeric('quantity', { precision: 10, scale: 0 }).notNull(),
   date: text('date').notNull(), // 交易日期 YYYY-MM-DD
   timestamp: text('timestamp').notNull(), // 交易时间戳
+  reason: text('reason'), // AI 决策理由
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
 

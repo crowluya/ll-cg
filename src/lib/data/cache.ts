@@ -197,3 +197,54 @@ if (typeof window === 'undefined') {
     clearExpiredCache();
   }, 5 * 60 * 1000);
 }
+
+// ==================== Phase 2.8: 请求合并机制 ====================
+
+// 进行中的请求 Map
+const pendingRequests = new Map<string, Promise<any>>();
+
+/**
+ * 请求合并：相同 key 的并发请求只执行一次
+ * @param key 缓存键
+ * @param fn 获取数据的函数
+ * @param ttl 缓存过期时间（毫秒）
+ * @returns 数据
+ *
+ * @example
+ * // 多个并发请求自动合并
+ * const data1 = mergeRequest('stock:sh600519', fetchStockData);
+ * const data2 = mergeRequest('stock:sh600519', fetchStockData);
+ * // 只会执行一次 fetchStockData
+ */
+export async function mergeRequest<T>(
+  key: string,
+  fn: () => Promise<T>,
+  ttl: number = DEFAULT_TTL
+): Promise<T> {
+  // 先检查缓存
+  const cached = getCached<T>(key);
+  if (cached !== null) {
+    return cached;
+  }
+
+  // 检查是否有正在进行的请求
+  const pending = pendingRequests.get(key);
+  if (pending) {
+    return pending;
+  }
+
+  // 创建新请求
+  const promise = (async () => {
+    try {
+      const data = await fn();
+      setCached(key, data, ttl);
+      return data;
+    } finally {
+      // 请求完成后移除待处理状态
+      pendingRequests.delete(key);
+    }
+  })();
+
+  pendingRequests.set(key, promise);
+  return promise;
+}

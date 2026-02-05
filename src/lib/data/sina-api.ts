@@ -1,5 +1,6 @@
 import axios from 'axios';
-import type { StockData } from '@/types';
+import iconv from 'iconv-lite';
+import type { StockData, RealtimeQuote, IntradayPoint } from '@/types';
 
 // 新浪财经 API 基础地址
 const SINA_API_BASE = (process.env.NEXT_PUBLIC_SINA_API_BASE || 'https://hq.sinajs.cn')
@@ -203,10 +204,11 @@ export async function fetchRealtimeData(code: string): Promise<{
     const response = await axios.get(url, {
       timeout: 5000,
       headers: SINA_HEADERS,
+      responseType: 'arraybuffer',
     });
 
-    // 新浪返回的数据格式: var hq_str_sh600000="浦发银行,10.50,10.45,10.55,..."
-    const data = response.data;
+    // 新浪返回 GBK 编码的数据，需要解码
+    const data = iconv.decode(Buffer.from(response.data), 'GBK');
     const match = data.match(/="([^"]+)"/);
 
     if (!match || !match[1]) {
@@ -269,10 +271,14 @@ export async function fetchBatchRealtimeData(codes: string[]): Promise<Array<{
     const response = await axios.get(url, {
       timeout: 5000,
       headers: SINA_HEADERS,
+      responseType: 'arraybuffer',
     });
 
+    // 新浪返回 GBK 编码的数据，需要解码
+    const data = iconv.decode(Buffer.from(response.data), 'GBK');
+
     // 解析多只股票的实时数据
-    const lines = response.data.split('\n').filter((line: string) => line.trim());
+    const lines = data.split('\n').filter((line: string) => line.trim());
     const results: Array<ReturnType<typeof fetchRealtimeData> extends Promise<infer T> ? T : never> = [];
 
     for (const line of lines) {
@@ -426,3 +432,232 @@ export const COMMON_STOCKS = {
   sz000002: '万科A',
   sz300750: '宁德时代',
 } as const;
+
+// ==================== Phase 2.2: 涨跌停检测与计算 ====================
+
+/**
+ * 计算涨跌停价格
+ * @param prevClose 昨收价
+ * @param code 股票代码（完整代码，如 sh600519, sz300750）
+ * @param direction 方向 ('up' 涨停, 'down' 跌停)
+ * @returns 涨跌停价格
+ */
+export function calcLimitPrice(
+  prevClose: number,
+  code: string,
+  direction: 'up' | 'down'
+): number {
+  const standardized = standardizeStockCode(code);
+
+  // 根据股票代码判断涨跌幅限制
+  let limitRatio = 0.1; // 默认主板 10%
+
+  if (standardized.startsWith('sz')) {
+    // 深圳
+    if (standardized.startsWith('sz30')) {
+      limitRatio = 0.2; // 创业板 20%
+    } else {
+      limitRatio = 0.1; // 主板/中小板 10%
+    }
+  } else if (standardized.startsWith('sh')) {
+    // 上海
+    if (standardized.startsWith('sh688')) {
+      limitRatio = 0.2; // 科创板 20%
+    } else {
+      limitRatio = 0.1; // 主板 10%
+    }
+  }
+
+  return direction === 'up'
+    ? prevClose * (1 + limitRatio)
+    : prevClose * (1 - limitRatio);
+}
+
+/**
+ * 判断是否涨停
+ * @param price 当前价格
+ * @param prevClose 昨收价
+ * @param code 股票代码
+ * @returns 是否涨停
+ */
+export function isLimitUp(price: number, prevClose: number, code: string): boolean {
+  const limitPrice = calcLimitPrice(prevClose, code, 'up');
+  return Math.abs(price - limitPrice) < 0.01; // 允许小数点误差
+}
+
+/**
+ * 判断是否跌停
+ * @param price 当前价格
+ * @param prevClose 昨收价
+ * @param code 股票代码
+ * @returns 是否跌停
+ */
+export function isLimitDown(price: number, prevClose: number, code: string): boolean {
+  const limitPrice = calcLimitPrice(prevClose, code, 'down');
+  return Math.abs(price - limitPrice) < 0.01; // 允许小数点误差
+}
+
+/**
+ * 判断是否停牌
+ * @param volume 成交量
+ * @param price 当前价格
+ * @param prevClose 昨收价
+ * @returns 是否停牌（成交量为0且价格不变）
+ */
+export function isSuspended(volume: number, price: number, prevClose: number): boolean {
+  return volume === 0 && Math.abs(price - prevClose) < 0.01;
+}
+
+// ==================== Phase 2.4: 股票搜索功能 ====================
+
+export interface StockSearchResult {
+  code: string;
+  name: string;
+  market: 'SH' | 'SZ';
+}
+
+/**
+ * 搜索股票（按代码或名称）
+ * @param query 搜索关键词
+ * @returns 搜索结果列表
+ */
+export async function searchStock(query: string): Promise<StockSearchResult[]> {
+  const trimmed = query.trim();
+  if (!trimmed) return [];
+
+  const results: StockSearchResult[] = [];
+
+  // 从常用股票中搜索
+  for (const [code, name] of Object.entries(COMMON_STOCKS)) {
+    const matchCode = code.toLowerCase().includes(trimmed.toLowerCase());
+    const matchName = name.includes(trimmed);
+
+    if (matchCode || matchName) {
+      results.push({
+        code,
+        name,
+        market: code.startsWith('sh') ? 'SH' : 'SZ',
+      });
+    }
+  }
+
+  return results;
+}
+
+// ==================== Phase 2.6: 分时数据获取 ====================
+
+/**
+ * 获取分时数据
+ * @param code 股票代码
+ * @param date 日期 YYYY-MM-DD
+ * @returns 分时数据点数组
+ */
+export async function getIntradayData(
+  code: string,
+  date: string
+): Promise<IntradayPoint[]> {
+  try {
+    const klineData = await fetchIntradayKLine(code, 1, 1024);
+
+    // 转换为 IntradayPoint 格式
+    return klineData.map(point => ({
+      timestamp: point.timestamp,
+      price: point.close,
+      volume: point.volume,
+    }));
+  } catch (error) {
+    console.error(`Error fetching intraday data for ${code}:`, error);
+    return [];
+  }
+}
+
+/**
+ * 批量获取实时行情（扩展版，返回 RealtimeQuote 类型）
+ * @param codes 股票代码数组
+ * @returns RealtimeQuote 数组
+ */
+export async function fetchRealtimeQuotes(codes: string[]): Promise<RealtimeQuote[]> {
+  try {
+    const standardCodes = codes.map(standardizeStockCode);
+    const url = `${SINA_API_BASE}/list=${standardCodes.join(',')}`;
+
+    const response = await axios.get(url, {
+      timeout: 5000,
+      headers: SINA_HEADERS,
+      responseType: 'arraybuffer',
+    });
+
+    // 新浪返回 GBK 编码的数据，需要解码
+    const data = iconv.decode(Buffer.from(response.data), 'GBK');
+
+    // 解析多只股票的实时数据
+    const lines = data.split('\n').filter((line: string) => line.trim());
+    const results: RealtimeQuote[] = [];
+
+    for (const line of lines) {
+      const match = line.match(/hq_str_(.+?)="([^"]*)"/);
+      if (match) {
+        const code = match[1];
+        const data = match[2];
+        if (data) {
+          const parts = data.split(',');
+          if (parts.length >= 32) {
+            const open = parseFloat(parts[1]);
+            const close = parseFloat(parts[2]); // 昨收
+            const price = parseFloat(parts[3]);
+            const high = parseFloat(parts[4]);
+            const low = parseFloat(parts[5]);
+            const volume = parseInt(parts[8], 10) * 100;
+
+            // 检测涨跌停和停牌
+            const isLimitUpVal = isLimitUp(price, close, code);
+            const isLimitDownVal = isLimitDown(price, close, code);
+            const isSuspendedVal = isSuspended(volume, price, close);
+
+            results.push({
+              code,
+              name: parts[0],
+              price,
+              open,
+              close,
+              high,
+              low,
+              volume,
+              timestamp: new Date().toISOString(),
+              // 买卖五档（如果有数据）
+              bid1: parts.length > 6 ? parseFloat(parts[6]) : undefined,
+              ask1: parts.length > 7 ? parseFloat(parts[7]) : undefined,
+              bidVol1: parts.length > 8 ? parseInt(parts[8], 10) : undefined,
+              askVol1: parts.length > 9 ? parseInt(parts[9], 10) : undefined,
+              bid2: parts.length > 10 ? parseFloat(parts[10]) : undefined,
+              ask2: parts.length > 11 ? parseFloat(parts[11]) : undefined,
+              bidVol2: parts.length > 12 ? parseInt(parts[12], 10) : undefined,
+              askVol2: parts.length > 13 ? parseInt(parts[13], 10) : undefined,
+              bid3: parts.length > 14 ? parseFloat(parts[14]) : undefined,
+              ask3: parts.length > 15 ? parseFloat(parts[15]) : undefined,
+              bidVol3: parts.length > 16 ? parseInt(parts[16], 10) : undefined,
+              askVol3: parts.length > 17 ? parseInt(parts[17], 10) : undefined,
+              bid4: parts.length > 18 ? parseFloat(parts[18]) : undefined,
+              ask4: parts.length > 19 ? parseFloat(parts[19]) : undefined,
+              bidVol4: parts.length > 20 ? parseInt(parts[20], 10) : undefined,
+              askVol4: parts.length > 21 ? parseInt(parts[21], 10) : undefined,
+              bid5: parts.length > 22 ? parseFloat(parts[22]) : undefined,
+              ask5: parts.length > 23 ? parseFloat(parts[23]) : undefined,
+              bidVol5: parts.length > 24 ? parseInt(parts[24], 10) : undefined,
+              askVol5: parts.length > 25 ? parseInt(parts[25], 10) : undefined,
+              // 状态标记
+              isLimitUp: isLimitUpVal,
+              isLimitDown: isLimitDownVal,
+              isSuspended: isSuspendedVal,
+            });
+          }
+        }
+      }
+    }
+
+    return results;
+  } catch (error) {
+    console.error('Error fetching batch realtime quotes:', error);
+    return [];
+  }
+}
