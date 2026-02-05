@@ -258,7 +258,7 @@ export class LiveTradingManager {
       this.lastThinkTimes.set(agentId, new Date());
 
       // 调用AI思考
-      const result = await agent.think({
+      const decision = await agent.think({
         stockCode: this.config.stockPool[0] || 'sh600519', // TODO: 支持多股票
         historyData: [], // TODO: 获取历史数据
         availableCapital: agent.getAccount().cash,
@@ -267,11 +267,11 @@ export class LiveTradingManager {
       });
 
       // 记录决策
-      this.lastDecisions.set(agentId, result.decision);
+      this.lastDecisions.set(agentId, decision);
       this.totalDecisions++;
 
-      // 如果有交易执行，记录
-      if (result.executed) {
+      // 如果决策是买入或卖出，记录交易
+      if (decision.action === 'buy' || decision.action === 'sell') {
         this.totalTrades++;
       }
 
@@ -279,8 +279,7 @@ export class LiveTradingManager {
       this.errors.delete(agentId);
 
       console.log(`[LiveTradingManager] AI决策完成: ${agentId}`, {
-        action: result.decision.action,
-        executed: result.executed,
+        action: decision.action,
       });
 
     } catch (error) {
@@ -295,8 +294,8 @@ export class LiveTradingManager {
    */
   private async fetchMarketData(): Promise<Map<string, RealtimeQuote> | null> {
     try {
-      const quotes = await fetchBatchRealtimeData(this.config.stockPool);
-      return quotes;
+      const quotesMap = await fetchBatchRealtimeData(this.config.stockPool);
+      return quotesMap;
     } catch (error) {
       console.error('[LiveTradingManager] 获取市场数据失败:', error);
       return null;

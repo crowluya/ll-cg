@@ -84,6 +84,7 @@ export class TradingEngine {
       id: `${model}-${stock}-buy-${Date.now()}`,
       model,
       stock,
+      stockName: stock,  // ✅ 添加stockName字段
       type: 'buy',
       price,
       quantity,
@@ -153,6 +154,7 @@ export class TradingEngine {
       id: `${model}-${stock}-sell-${Date.now()}`,
       model,
       stock,
+      stockName: stock,  // ✅ 添加stockName字段
       type: 'sell',
       price,
       quantity,

@@ -50,27 +50,13 @@ export async function buildDecisionInput(
     currentDate: formattedDate,
     availableCapital,
     historyData: historyData ?? [],
+    currentPosition,
+    account,
+    config,
+    realtimeQuotes,
+    intradayData,
+    currentTime: new Date().toISOString(),
   };
-
-  // 可选字段
-  if (currentPosition) {
-    input.currentPosition = currentPosition;
-  }
-  if (account) {
-    input.account = account;
-  }
-  if (config) {
-    input.config = config;
-  }
-  if (realtimeQuotes) {
-    input.realtimeQuotes = realtimeQuotes;
-  }
-  if (intradayData) {
-    input.intradayData = intradayData;
-  }
-
-  // 添加当前时间戳
-  input.currentTime = new Date().toISOString();
 
   return input;
 }

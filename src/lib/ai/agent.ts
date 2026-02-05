@@ -43,7 +43,7 @@ interface TradeUpdate {
  * 管理单个 AI 模型的交易账户和决策
  */
 export class AIAgent {
-  private readonly id: string;
+  public readonly id: string;  // ✅ 改为public以供外部访问
   private readonly model: AIModelKey;
   private readonly config: Required<AgentConfig>;
   private cash: number;

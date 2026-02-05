@@ -52,7 +52,8 @@ export const batchDecisionSchema = z.object({
 
 // 类型导出
 export type AIDecision = z.infer<typeof decisionSchema>;
-export type DecisionInput = z.infer<typeof decisionInputSchema>;
+// DecisionInput 使用 types/index.ts 中的定义（更完整）
+export type { DecisionInput } from '@/types';
 export type BatchDecisionInput = z.infer<typeof batchDecisionSchema>;
 
 // 决策结果 schema（包含执行结果）

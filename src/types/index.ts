@@ -98,7 +98,7 @@ export interface DecisionInput {
   currentPosition?: Position;
   availableCapital: number;
   currentDate: string;
-  // 扩展字段
+  // 扩展字段（可选）
   realtimeQuotes?: Map<string, RealtimeQuote>;  // 实时行情
   klineData?: StockData[];                       // K线数据
   intradayData?: IntradayPoint[];                // 分时数据
