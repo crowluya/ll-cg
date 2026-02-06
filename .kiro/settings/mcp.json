@@ -1,0 +1,35 @@
+{
+  "mcpServers": {
+    "playwright": {
+      "command": "npx",
+      "args": ["-y", "@executeautomation/playwright-mcp-server"],
+      "env": {},
+      "disabled": true,
+      "autoApprove": [
+        "playwright_navigate",
+        "playwright_screenshot",
+        "playwright_click",
+        "playwright_fill",
+        "playwright_select",
+        "playwright_hover",
+        "playwright_evaluate",
+        "playwright_close"
+      ]
+    },
+    "puppeteer": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-puppeteer"],
+      "env": {},
+      "disabled": false,
+      "autoApprove": [
+        "puppeteer_navigate",
+        "puppeteer_screenshot",
+        "puppeteer_click",
+        "puppeteer_fill",
+        "puppeteer_select",
+        "puppeteer_evaluate",
+        "puppeteer_close"
+      ]
+    }
+  }
+}
