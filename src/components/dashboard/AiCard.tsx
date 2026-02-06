@@ -22,6 +22,7 @@ interface AiCardProps {
 
 /**
  * 格式化货币金额
+ * 注意：项目中已有 formatCurrency 工具函数，但为了组件独立性，这里保留本地实现
  */
 function formatCurrency(value: number): string {
   return new Intl.NumberFormat('zh-CN', {
@@ -29,7 +30,7 @@ function formatCurrency(value: number): string {
     currency: 'CNY',
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
-  }).format(value).replace('¥', '¥');
+  }).format(value);
 }
 
 /**

@@ -72,9 +72,9 @@ describe('AiCard', () => {
       expect(screen.getByText('贵州茅台')).toBeInTheDocument();
       expect(screen.getByText('平安银行')).toBeInTheDocument();
 
-      // 检查持仓数量
-      expect(screen.getByText(/100/)).toBeInTheDocument();
-      expect(screen.getByText(/1000/)).toBeInTheDocument();
+      // 检查持仓数量（使用更精确的选择器）
+      expect(screen.getByText(/100股/)).toBeInTheDocument();
+      expect(screen.getByText(/1000股/)).toBeInTheDocument();
     });
   });
 
@@ -82,8 +82,10 @@ describe('AiCard', () => {
     it('盈利时应该显示红色（中国股市习惯）', () => {
       render(<AiCard model="DeepSeek" account={mockAccount} />);
 
-      const profitElement = screen.getByText(/\+147,800/);
-      expect(profitElement).toHaveClass('text-red-600');
+      // 查找累计盈亏元素（使用更精确的选择器）
+      const profitElements = screen.getAllByText(/\+¥147,800\.00/);
+      expect(profitElements.length).toBeGreaterThan(0);
+      expect(profitElements[0]).toHaveClass('text-red-600');
     });
 
     it('亏损时应该显示绿色（中国股市习惯）', () => {
@@ -97,8 +99,10 @@ describe('AiCard', () => {
 
       render(<AiCard model="DeepSeek" account={lossAccount} />);
 
-      const profitElement = screen.getByText(/-10,000/);
-      expect(profitElement).toHaveClass('text-green-600');
+      // 查找累计盈亏元素
+      const profitElements = screen.getAllByText(/-¥10,000\.00/);
+      expect(profitElements.length).toBeGreaterThan(0);
+      expect(profitElements[0]).toHaveClass('text-green-600');
     });
 
     it('持平时应该显示灰色', () => {
@@ -112,8 +116,11 @@ describe('AiCard', () => {
 
       render(<AiCard model="DeepSeek" account={flatAccount} />);
 
-      const profitElement = screen.getByText(/0\.00/);
-      expect(profitElement).toHaveClass('text-gray-600');
+      // 查找累计盈亏元素（使用更精确的选择器）
+      const profitElements = screen.getAllByText(/\+¥0\.00/);
+      // 应该至少有两个（今日盈亏和累计盈亏）
+      expect(profitElements.length).toBeGreaterThanOrEqual(2);
+      expect(profitElements[0]).toHaveClass('text-gray-600');
     });
   });
 

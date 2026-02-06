@@ -22,6 +22,18 @@ interface StatsPanelProps {
   selectedModel?: string;
 }
 
+// 常量定义
+const THRESHOLDS = {
+  HIGH_WIN_RATE: 60,      // 高胜率阈值（%）
+  HIGH_DRAWDOWN: 10,      // 高回撤阈值（%）
+} as const;
+
+const COLORS = {
+  GOOD: 'text-green-600',   // 好的指标（高胜率）
+  BAD: 'text-red-600',      // 差的指标（低胜率、高回撤）
+  NEUTRAL: 'text-gray-700', // 中性指标
+} as const;
+
 export function StatsPanel({
   stats,
   modelStats = [],
@@ -43,10 +55,10 @@ export function StatsPanel({
   const maxDrawdown = displayStats?.maxDrawdown ?? 0;
 
   // 胜率颜色判断
-  const winRateColor = winRate >= 60 ? 'text-green-600' : 'text-red-600';
+  const winRateColor = winRate >= THRESHOLDS.HIGH_WIN_RATE ? COLORS.GOOD : COLORS.BAD;
 
   // 回撤颜色判断
-  const drawdownColor = maxDrawdown >= 10 ? 'text-red-600' : 'text-gray-700';
+  const drawdownColor = maxDrawdown >= THRESHOLDS.HIGH_DRAWDOWN ? COLORS.BAD : COLORS.NEUTRAL;
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-6 p-6 bg-white rounded-lg shadow">

@@ -25,6 +25,25 @@ interface IntradayChartProps {
   height?: string | number;
 }
 
+// 常量定义
+const COLORS = {
+  UP: '#ef4444',    // 红色 - 上涨
+  DOWN: '#22c55e',  // 绿色 - 下跌
+  VOLUME: '#94a3b8', // 灰蓝色 - 成交量
+  GRID: '#E5E7EB',   // 灰色 - 网格线
+  TEXT: '#6B7280',   // 灰色 - 文字
+} as const;
+
+const CHART_PADDING = {
+  LEFT: '60px',
+  RIGHT: '60px',
+  TOP: '20px',
+  BOTTOM: '40px',
+} as const;
+
+const PRICE_RANGE_MULTIPLIER = 1.1; // 价格轴范围扩展系数
+const VOLUME_THRESHOLD = 10000; // 成交量显示阈值（万）
+
 export function IntradayChart({
   data,
   stockInfo,
@@ -41,7 +60,7 @@ export function IntradayChart({
 
     // 根据涨跌设置颜色
     const isUp = (stockInfo?.changePercent ?? 0) >= 0;
-    const priceColor = isUp ? '#ef4444' : '#22c55e'; // 红涨绿跌
+    const priceColor = isUp ? COLORS.UP : COLORS.DOWN;
 
     // 计算价格轴范围（以昨收价为中心）
     const prevClose = stockInfo?.prevClose ?? 100;
@@ -54,25 +73,25 @@ export function IntradayChart({
         Math.abs(maxPrice - prevClose),
         Math.abs(minPrice - prevClose)
       );
-      minPrice = prevClose - maxDeviation * 1.1;
-      maxPrice = prevClose + maxDeviation * 1.1;
+      minPrice = prevClose - maxDeviation * PRICE_RANGE_MULTIPLIER;
+      maxPrice = prevClose + maxDeviation * PRICE_RANGE_MULTIPLIER;
     }
 
     return {
       backgroundColor: 'transparent',
       grid: {
-        left: '60px',
-        right: '60px',
-        top: '20px',
-        bottom: '40px',
+        left: CHART_PADDING.LEFT,
+        right: CHART_PADDING.RIGHT,
+        top: CHART_PADDING.TOP,
+        bottom: CHART_PADDING.BOTTOM,
         containLabel: false,
       },
       xAxis: {
         type: 'category',
         data: timestamps,
-        axisLine: { lineStyle: { color: '#E5E7EB' } },
+        axisLine: { lineStyle: { color: COLORS.GRID } },
         axisLabel: {
-          color: '#6B7280',
+          color: COLORS.TEXT,
           fontSize: 11,
           hideOverlap: true,
         },
@@ -87,13 +106,13 @@ export function IntradayChart({
           position: 'left',
           axisLine: { show: false },
           axisLabel: {
-            color: '#6B7280',
+            color: COLORS.TEXT,
             fontSize: 11,
             formatter: (value: number) => value.toFixed(2),
           },
           splitLine: {
             lineStyle: {
-              color: '#E5E7EB',
+              color: COLORS.GRID,
               type: 'dashed',
               opacity: 0.6,
             },
@@ -105,11 +124,11 @@ export function IntradayChart({
           position: 'right',
           axisLine: { show: false },
           axisLabel: {
-            color: '#6B7280',
+            color: COLORS.TEXT,
             fontSize: 11,
             formatter: (value: number) => {
-              if (value >= 10000) {
-                return (value / 10000).toFixed(1) + '万';
+              if (value >= VOLUME_THRESHOLD) {
+                return (value / VOLUME_THRESHOLD).toFixed(1) + '万';
               }
               return value.toString();
             },
@@ -177,7 +196,7 @@ export function IntradayChart({
           data: volumes,
           yAxisIndex: 1,
           itemStyle: {
-            color: '#94a3b8',
+            color: COLORS.VOLUME,
             opacity: 0.5,
           },
         },
