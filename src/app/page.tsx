@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import React, { useState } from 'react';
 import Link from 'next/link';
 import { PortfolioTotalChart } from '@/components/charts/PortfolioTotalChart';
 import { HoldingsPricePanel } from '@/components/portfolio/HoldingsPricePanel';
