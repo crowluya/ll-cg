@@ -3,15 +3,17 @@ import path from 'path';
 
 export default defineConfig({
   test: {
-    environment: 'node',
+    environment: 'jsdom', // 改为jsdom以支持React组件测试
     globals: true,
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'html'],
-      include: ['src/**/*.ts'],
+      include: ['src/**/*.ts', 'src/**/*.tsx'], // 添加tsx文件
       exclude: [
         'src/**/*.test.ts',
+        'src/**/*.test.tsx',
         'src/**/*.spec.ts',
+        'src/**/*.spec.tsx',
         'src/types/**',
         'node_modules/**',
       ],

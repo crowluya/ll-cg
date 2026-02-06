@@ -3,7 +3,8 @@
  * 在所有测试运行前执行
  */
 
-import { vi } from 'vitest';
+import { vi, afterAll } from 'vitest';
+import '@testing-library/jest-dom'; // 添加jest-dom匹配器
 
 // 设置测试环境变量
 process.env.OPENROUTER_API_KEY = 'test-api-key';
